@@ -71,7 +71,7 @@ func (r *Renderer) landscape(conf cnd.Conference, s cnd.Session, g theme.Geometr
 		if i >= len(positions) {
 			break
 		}
-		r.photo(c, sp, positions[i], y, photoSize, float64(g.Radius))
+		r.photo(c, p, sp, positions[i], y, photoSize, float64(g.Radius))
 	}
 	if len(positions) > 0 {
 		y += photoSize + float64(g.Gap)*0.6

@@ -99,10 +99,12 @@ func statusLine(summary string, changes []manifest.Change, muted bool) statusRep
 // renderRows re-renders every talk row, with the status report swapped in
 // out-of-band so it survives replacing the rows.
 func (s *Server) renderRows(w http.ResponseWriter, size string, status statusReport) {
+	p := s.probe(s.opts.Program.Sessions)
+
 	s.mu.Lock()
 	views := make([]talkView, 0, len(s.opts.Program.Sessions))
 	for _, sess := range s.opts.Program.Sessions {
-		views = append(views, s.buildViewLocked(sess, size))
+		views = append(views, s.buildViewLocked(sess, size, p))
 	}
 	s.mu.Unlock()
 

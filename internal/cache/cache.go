@@ -13,8 +13,22 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
+
+// DefaultTimeout bounds a single fetch.
+//
+// There was no timeout at all, and Go's default client has none either, so one
+// unresponsive image host was enough to hang a request forever. In the preview
+// server that request holds the lock every page render needs, so a single dead
+// photo URL wedged the whole app — reproduced against a host that accepts the
+// connection and never answers.
+//
+// Generous rather than tight: the program page is ~5 MB and a speaker page
+// ~3.4 MB, and a slow conference network should not fail a fetch that would
+// have succeeded.
+const DefaultTimeout = 30 * time.Second
 
 // Cache stores fetched response bodies under Dir.
 type Cache struct {
@@ -22,6 +36,24 @@ type Cache struct {
 	TTL time.Duration
 	// Disabled bypasses both reads and writes, always hitting the network.
 	Disabled bool
+	// Timeout bounds one fetch, including connect, headers and body. Zero
+	// means DefaultTimeout.
+	Timeout time.Duration
+
+	once   sync.Once
+	client *http.Client
+}
+
+// httpClient returns the client for this cache, built once.
+func (c *Cache) httpClient() *http.Client {
+	c.once.Do(func() {
+		timeout := c.Timeout
+		if timeout <= 0 {
+			timeout = DefaultTimeout
+		}
+		c.client = &http.Client{Timeout: timeout}
+	})
+	return c.client
 }
 
 // DefaultDir is the user cache directory this tool writes to.
@@ -51,7 +83,7 @@ func (c *Cache) Get(url string) ([]byte, error) {
 		}
 	}
 
-	resp, err := http.Get(url)
+	resp, err := c.httpClient().Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("fetching %s: %w", url, err)
 	}

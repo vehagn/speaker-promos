@@ -54,11 +54,30 @@ type Result struct {
 
 // Card renders one session at one card size.
 func (r *Renderer) Card(conf cnd.Conference, s cnd.Session, size string) (Result, error) {
+	return r.render(conf, s, size, false)
+}
+
+// Inspect reports what rendering a card would warn about — truncated text, or
+// emoji a renderer will drop — without producing a usable card.
+//
+// It exists because the preview server needs those warnings for every row on
+// the page, and getting them from a full Card render meant fetching a photo and
+// base64-encoding two fonts per row. That is ~25 MB of work to read two
+// booleans, and it did network I/O: one unresponsive photo host hung the page
+// for as long as it stayed silent. The warnings come from the text layout,
+// which needs neither.
+//
+// The returned SVG is not a card and must not be served.
+func (r *Renderer) Inspect(conf cnd.Conference, s cnd.Session, size string) (Result, error) {
+	return r.render(conf, s, size, true)
+}
+
+func (r *Renderer) render(conf cnd.Conference, s cnd.Session, size string, inspect bool) (Result, error) {
 	g, err := r.Theme.Size(size)
 	if err != nil {
 		return Result{}, err
 	}
-	p := &pass{faces: map[string]bool{}}
+	p := &pass{faces: map[string]bool{}, inspect: inspect}
 
 	var svg string
 	switch size {
@@ -88,6 +107,10 @@ type pass struct {
 	faces    map[string]bool
 	emoji    bool
 	overflow []string
+	// inspect asks for the warnings only. It skips fetching photos and
+	// base64-encoding fonts, which is everything expensive about a render and
+	// nothing the warnings depend on.
+	inspect bool
 }
 
 func (p *pass) face(key string) {
@@ -125,7 +148,9 @@ func (r *Renderer) prelude(g theme.Geometry, p *pass) string {
 	// Deterministic order keeps output byte-stable across runs, which is what
 	// makes the golden tests meaningful and diffs reviewable.
 	sortFaces(embed)
-	c.write(fontFaceCSS(embed))
+	if !p.inspect {
+		c.write(fontFaceCSS(embed))
+	}
 
 	pal := r.Theme.Palette
 	c.writef(`  <defs>
@@ -163,7 +188,7 @@ func (r *Renderer) backdrop(c *canvas, g theme.Geometry) {
 // Photos are embedded as data URIs so a card is a single self-contained file —
 // the 2025 promos were hand-built the same way. A remote <image href> would
 // leave a card that breaks when the CDN URL rotates.
-func (r *Renderer) photo(c *canvas, sp cnd.Speaker, x, y, size, radius float64) {
+func (r *Renderer) photo(c *canvas, p *pass, sp cnd.Speaker, x, y, size, radius float64) {
 	clip := fmt.Sprintf("photo-%s", strings.ReplaceAll(sp.Slug+sp.ID, " ", ""))
 	if clip == "photo-" {
 		clip = "photo-anon"
@@ -172,7 +197,7 @@ func (r *Renderer) photo(c *canvas, sp cnd.Speaker, x, y, size, radius float64) 
 	c.writef("  <defs><clipPath id=%q><rect x=\"%s\" y=\"%s\" width=\"%s\" height=\"%s\" rx=\"%s\"/></clipPath></defs>\n",
 		clip, num(x), num(y), num(size), num(size), num(radius))
 
-	if data, mime, ok := r.fetchPhoto(sp, int(size)); ok {
+	if data, mime, ok := r.photoData(p, sp, int(size)); ok {
 		c.writef("  <image x=\"%s\" y=\"%s\" width=\"%s\" height=\"%s\" clip-path=\"url(#%s)\" preserveAspectRatio=\"xMidYMid slice\" xlink:href=\"data:%s;base64,%s\"/>\n",
 			num(x), num(y), num(size), num(size), clip, mime, base64.StdEncoding.EncodeToString(data))
 	} else {
@@ -234,6 +259,15 @@ func Initials(name string) string {
 func (r *Renderer) HasPhoto(sp cnd.Speaker) bool {
 	_, _, ok := r.fetchPhoto(sp, 0)
 	return ok
+}
+
+// photoData is fetchPhoto unless this is an inspection pass, which must not
+// touch the network.
+func (r *Renderer) photoData(p *pass, sp cnd.Speaker, size int) ([]byte, string, bool) {
+	if p != nil && p.inspect {
+		return nil, "", false
+	}
+	return r.fetchPhoto(sp, size)
 }
 
 // fetchPhoto downloads a speaker photo, returning its bytes and MIME type.

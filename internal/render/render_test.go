@@ -1,13 +1,22 @@
 package render
 
 import (
+	"bytes"
 	"encoding/xml"
 	"flag"
+	"image"
+	"image/color"
+	"image/png"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+	"time"
+
+	"github.com/vehagn/speaker-promos/internal/cache"
 
 	"github.com/vehagn/speaker-promos/internal/cnd"
 	"github.com/vehagn/speaker-promos/internal/theme"
@@ -359,4 +368,125 @@ func svgText(t *testing.T, doc string) string {
 		}
 	}
 	return strings.Join(parts, " ")
+}
+
+// Inspect is the source of the preview server's warnings, so it has to agree
+// with Card exactly. It skips fetching photos and embedding fonts — neither of
+// which the warnings depend on — but if it ever diverged the UI would report
+// something the card does not do.
+func TestInspectAgreesWithCard(t *testing.T) {
+	r := renderer(t)
+	conf := testConference()
+
+	sessions := []cnd.Session{
+		testSession(),
+		func() cnd.Session { // emoji title
+			s := testSession()
+			s.Talk.Title = "Kan 🇳🇴 skyen kjøre på en brødrister?"
+			return s
+		}(),
+		func() cnd.Session { // long enough to truncate
+			s := testSession()
+			s.Talk.Title = strings.Repeat("An extremely long talk title about platforms ", 8)
+			s.Talk.Speakers[0].Name = strings.Repeat("Very Long Speaker Name ", 6)
+			return s
+		}(),
+		func() cnd.Session { // no title, several speakers
+			s := testSession()
+			s.Talk.Speakers[0].Title = ""
+			s.Talk.Speakers = append(s.Talk.Speakers,
+				cnd.Speaker{ID: "b", Name: "Solveig Ulriksen", Slug: "solveig", Title: "Skyvakt"})
+			return s
+		}(),
+	}
+
+	for i, sess := range sessions {
+		for _, size := range []string{"portrait", "landscape"} {
+			card, err := r.Card(conf, sess, size)
+			if err != nil {
+				t.Fatal(err)
+			}
+			seen, err := r.Inspect(conf, sess, size)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if seen.EmojiFallback != card.EmojiFallback {
+				t.Errorf("session %d %s: EmojiFallback = %v, Card says %v",
+					i, size, seen.EmojiFallback, card.EmojiFallback)
+			}
+			if strings.Join(seen.Overflow, ",") != strings.Join(card.Overflow, ",") {
+				t.Errorf("session %d %s: Overflow = %v, Card says %v",
+					i, size, seen.Overflow, card.Overflow)
+			}
+			if seen.Width != card.Width || seen.Height != card.Height {
+				t.Errorf("session %d %s: size %dx%d, Card says %dx%d",
+					i, size, seen.Width, seen.Height, card.Width, card.Height)
+			}
+		}
+	}
+}
+
+// The point of Inspect is that it is cheap: no network I/O and no base64 font
+// payload. Both were costing the preview server a full card render per row.
+func TestInspectSkipsPhotosAndFonts(t *testing.T) {
+	var asked int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked++
+		w.Header().Set("Content-Type", "image/png")
+		w.Write(onePixelPNG(t))
+	}))
+	defer srv.Close()
+
+	th, err := theme.Default()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := New(th, cache.New(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess := testSession()
+	sess.Talk.Speakers[0].Image = srv.URL + "/photo.png"
+
+	seen, err := r.Inspect(testConference(), sess, "portrait")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if asked != 0 {
+		t.Errorf("Inspect fetched the photo %d time(s); it must not touch the network", asked)
+	}
+	if strings.Contains(seen.SVG, "@font-face") {
+		t.Error("Inspect embedded the fonts")
+	}
+	if strings.Contains(seen.SVG, "<image") {
+		t.Error("Inspect embedded a photo")
+	}
+
+	// Card, by contrast, does both.
+	card, err := r.Card(testConference(), sess, "portrait")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if asked == 0 {
+		t.Error("Card did not fetch the photo")
+	}
+	if !strings.Contains(card.SVG, "@font-face") || !strings.Contains(card.SVG, "<image") {
+		t.Error("Card is missing its fonts or photo")
+	}
+	// And is far larger, which is the cost Inspect avoids per row.
+	if len(card.SVG) < len(seen.SVG)*4 {
+		t.Errorf("Card is %d bytes and Inspect %d; expected a large gap",
+			len(card.SVG), len(seen.SVG))
+	}
+}
+
+func onePixelPNG(t *testing.T) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 1, 1))
+	img.Set(0, 0, color.White)
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
 }

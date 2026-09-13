@@ -76,6 +76,14 @@ type Server struct {
 	// speaker page is ~3 MB; re-fetching on every re-render would make editing
 	// unusable even against the on-disk cache.
 	links map[string]cnd.Links
+
+	// photoMu guards photos, and is separate from mu for the same reason
+	// linksMu is: filling this cache does network I/O.
+	photoMu sync.Mutex
+	// photos records whether a resolved image could actually be fetched, keyed
+	// by the image reference itself so that changing an override re-probes
+	// rather than returning the old answer.
+	photos map[string]bool
 }
 
 // New builds a Server.
@@ -106,6 +114,7 @@ func New(opts Options) (*Server, error) {
 		hasConverter: hasConv,
 		rev:          time.Now().Unix(),
 		links:        map[string]cnd.Links{},
+		photos:       map[string]bool{},
 	}, nil
 }
 
@@ -145,11 +154,12 @@ func (s *Server) session(id string) (cnd.Session, bool) {
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	size := s.sizeParam(r)
+	p := s.probe(s.opts.Program.Sessions)
 
 	s.mu.Lock()
 	views := make([]talkView, 0, len(s.opts.Program.Sessions))
 	for _, sess := range s.opts.Program.Sessions {
-		views = append(views, s.buildViewLocked(sess, size))
+		views = append(views, s.buildViewLocked(sess, size, p))
 	}
 	rev := s.rev
 	setPath := s.opts.Set.Path()
@@ -181,8 +191,9 @@ func (s *Server) handleTalkFragment(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	p := s.probe([]cnd.Session{sess})
 	s.mu.Lock()
-	view := s.buildViewLocked(sess, s.sizeParam(r))
+	view := s.buildViewLocked(sess, s.sizeParam(r), p)
 	s.mu.Unlock()
 	s.renderTemplate(w, "talk.html", view)
 }
@@ -208,7 +219,13 @@ func (s *Server) handleTalkUpdate(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		s.rev++
 	}
-	view := s.buildViewLocked(sess, s.sizeParam(r))
+	s.mu.Unlock()
+
+	// Probed after the write and outside the lock, so the view reflects the
+	// edit without holding the lock across a fetch.
+	p := s.probe([]cnd.Session{sess})
+	s.mu.Lock()
+	view := s.buildViewLocked(sess, s.sizeParam(r), p)
 	s.mu.Unlock()
 
 	if err != nil {
@@ -247,7 +264,13 @@ func (s *Server) handleSpeakerUpdate(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		s.rev++
 	}
-	view := s.buildViewLocked(sess, s.sizeParam(r))
+	s.mu.Unlock()
+
+	// Probed after the write and outside the lock: a newly set image URL is
+	// uncached, and fetching it under the lock is what used to hang the server.
+	p := s.probe([]cnd.Session{sess})
+	s.mu.Lock()
+	view := s.buildViewLocked(sess, s.sizeParam(r), p)
 	s.mu.Unlock()
 
 	if err != nil {
@@ -294,6 +317,9 @@ func (s *Server) card(id, size string) (string, cnd.Session, bool) {
 	rewritten := s.opts.Set.Rewrite(sess)
 	s.mu.Unlock()
 
+	// Card, not Inspect: this is the image the browser shows and downloads, so
+	// it needs the photo and the embedded fonts. Inspect is only for the
+	// warnings on the page around it.
 	res, err := s.renderer.Card(s.opts.Program.Conference, rewritten, size)
 	if err != nil {
 		return "", cnd.Session{}, false
@@ -354,17 +380,16 @@ func (s *Server) speakerLinks(sp cnd.Speaker) cnd.Links {
 	return l
 }
 
-// Warm pre-fetches every speaker's social links.
+// Warm pre-fetches every speaker's social links and photo.
 //
-// Without this the first page load fetches 49 speaker pages of ~3 MB each,
-// serially, before rendering anything — about twenty seconds of apparently
-// hung browser. Doing it up front makes the cost visible and bounded, and the
-// on-disk cache means it only happens once per machine. Progress goes to
-// `progress` so the caller can print it.
+// Without this the first page load fetches 49 speaker pages of ~3 MB each plus
+// 49 photos, serially, before rendering anything. Doing it up front makes the
+// cost visible and bounded, and the on-disk cache means it only happens once
+// per machine. Progress goes to `progress` so the caller can print it.
+//
+// Photos are warmed even with --no-links, because the page reports which cards
+// fell back to a monogram and that answer costs a fetch.
 func (s *Server) Warm(parallel int, progress func(done, total int)) {
-	if s.opts.NoLinks {
-		return
-	}
 	speakers := s.opts.Program.Speakers()
 	if parallel < 1 {
 		parallel = 1
@@ -384,7 +409,14 @@ func (s *Server) Warm(parallel int, progress func(done, total int)) {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			s.speakerLinks(sp)
+			if !s.opts.NoLinks {
+				s.speakerLinks(sp)
+			}
+			// The rewritten speaker, since an image override is what decides
+			// whether there is a photo at all.
+			s.hasPhoto(s.opts.Set.Rewrite(cnd.Session{
+				Talk: cnd.Talk{Speakers: []cnd.Speaker{sp}},
+			}).Talk.Speakers[0])
 
 			mu.Lock()
 			done++
@@ -398,8 +430,72 @@ func (s *Server) Warm(parallel int, progress func(done, total int)) {
 	wg.Wait()
 }
 
-// buildViewLocked assembles a talk's view. Callers must hold s.mu.
-func (s *Server) buildViewLocked(sess cnd.Session, size string) talkView {
+// probes are the network-dependent answers a view needs: scraped handles, and
+// whether each speaker's photo can actually be fetched.
+//
+// They are gathered BEFORE the page lock is taken. Doing the fetching inside
+// buildViewLocked meant one unresponsive image host blocked the lock every
+// render needs, so a single dead photo URL wedged the whole server — not just
+// the page it appeared on. Reproduced against a host that accepts the
+// connection and never answers, then fixed here and bounded by a timeout in
+// internal/cache.
+type probes struct {
+	links  map[string]cnd.Links
+	photos map[string]bool
+}
+
+func (p probes) linksFor(slug string) cnd.Links { return p.links[slug] }
+func (p probes) photoFor(slug string) bool      { return p.photos[slug] }
+
+// probe gathers the answers for the given sessions. It must NOT be called with
+// s.mu held; it takes the manifest's own lock to resolve overrides, and does
+// network I/O.
+func (s *Server) probe(sessions []cnd.Session) probes {
+	out := probes{links: map[string]cnd.Links{}, photos: map[string]bool{}}
+	for _, sess := range sessions {
+		// Rewrite applies an image override, which is what the photo answer is
+		// about; it takes the manifest's lock, never s.mu.
+		rewritten := s.opts.Set.Rewrite(sess)
+		for i, sp := range sess.Talk.Speakers {
+			if sp.Slug == "" {
+				continue
+			}
+			if _, done := out.links[sp.Slug]; !done {
+				out.links[sp.Slug] = s.speakerLinks(sp)
+			}
+			rendered := sp
+			if i < len(rewritten.Talk.Speakers) {
+				rendered = rewritten.Talk.Speakers[i]
+			}
+			out.photos[sp.Slug] = s.hasPhoto(rendered)
+		}
+	}
+	return out
+}
+
+// hasPhoto reports whether a speaker's photo can be fetched, once per image.
+func (s *Server) hasPhoto(sp cnd.Speaker) bool {
+	if sp.Image == "" {
+		return false
+	}
+	s.photoMu.Lock()
+	ok, seen := s.photos[sp.Image]
+	s.photoMu.Unlock()
+	if seen {
+		return ok
+	}
+
+	ok = s.renderer.HasPhoto(sp)
+
+	s.photoMu.Lock()
+	s.photos[sp.Image] = ok
+	s.photoMu.Unlock()
+	return ok
+}
+
+// buildViewLocked assembles a talk's view. Callers must hold s.mu, and must
+// have gathered p outside it.
+func (s *Server) buildViewLocked(sess cnd.Session, size string, p probes) talkView {
 	set := s.opts.Set
 	rewritten := set.Rewrite(sess)
 	overrides := set.Overrides()
@@ -418,7 +514,7 @@ func (s *Server) buildViewLocked(sess cnd.Session, size string) talkView {
 	}
 	in := post.Input{Conference: s.opts.Program.Conference, Session: rewritten, Language: lang}
 	for i, sp := range sess.Talk.Speakers {
-		links := overrides.LinksFor(sp, s.speakerLinks(sp))
+		links := overrides.LinksFor(sp, p.linksFor(sp.Slug))
 		role := overrides.RoleFor(sp)
 		override, _ := set.Speaker(sp.Slug)
 
@@ -427,12 +523,11 @@ func (s *Server) buildViewLocked(sess cnd.Session, size string) talkView {
 		// The FORM shows the original: its placeholders are what the CMS says,
 		// which is what an override is being compared against.
 		//
-		// Everything that describes the OUTPUT — the photo check and the draft
-		// copy — uses the rewritten speaker, because that is who the card and
-		// the post are about. Building the copy from the original left a
-		// corrected name on the card but not in the draft beside it, which is
-		// exactly the drift this view model exists to prevent. Rewrite
-		// preserves order and length, so the indices line up.
+		// The draft COPY uses the rewritten speaker, because that is who the
+		// post is about. Building it from the original left a corrected name on
+		// the card but not in the draft beside it, which is exactly the drift
+		// this view model exists to prevent. Rewrite preserves order and
+		// length, so the indices line up.
 		rendered := sp
 		if i < len(rewritten.Talk.Speakers) {
 			rendered = rewritten.Talk.Speakers[i]
@@ -444,7 +539,7 @@ func (s *Server) buildViewLocked(sess cnd.Session, size string) talkView {
 			Links:    links,
 			Override: override,
 			Guessed:  role.Guessed,
-			HasPhoto: s.renderer.HasPhoto(rendered),
+			HasPhoto: p.photoFor(sp.Slug),
 		})
 		in.Speakers = append(in.Speakers, post.Speaker{Speaker: rendered, Role: role, Links: links})
 	}
@@ -461,7 +556,10 @@ func (s *Server) buildViewLocked(sess cnd.Session, size string) talkView {
 		d.Over = d.Limit > 0 && d.Draft.Runes() > d.Limit
 	}
 
-	if res, err := s.renderer.Card(s.opts.Program.Conference, rewritten, size); err == nil {
+	// Inspect, not Card: the warnings come from the text layout, and a full
+	// render here would fetch a photo and base64 two fonts for every row on the
+	// page — under this lock.
+	if res, err := s.renderer.Inspect(s.opts.Program.Conference, rewritten, size); err == nil {
 		if res.EmojiFallback {
 			view.Warnings = append(view.Warnings,
 				"contains emoji: renders in browsers, but Inkscape and librsvg leave a gap")

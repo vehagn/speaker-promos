@@ -795,3 +795,80 @@ func TestImportRejectsAMalformedBundle(t *testing.T) {
 		t.Error("a failed import wrote the manifest")
 	}
 }
+
+// Regression: the page hung. Every row's warnings came from a full card render
+// inside the page lock, so rendering the index fetched 36 photos and
+// base64-encoded two fonts per row — and one unresponsive photo host blocked
+// the lock every request needs, wedging the whole server rather than just the
+// image it belonged to.
+//
+// Now the rows are built with Inspect, which does no network I/O, and the
+// probing that does happens outside the lock and is bounded by a timeout.
+func TestIndexDoesNotWaitOnADeadPhotoHost(t *testing.T) {
+	block := make(chan struct{})
+	dead := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-block // accepts the connection, never answers
+	}))
+	defer dead.Close()
+	defer close(block)
+
+	dir := t.TempDir()
+	th, err := theme.Default()
+	if err != nil {
+		t.Fatal(err)
+	}
+	set := manifest.New(filepath.Join(dir, "promos.yaml"))
+	if err := set.SetSpeaker("dario-haaland", manifest.SpeakerSpec{
+		Image: dead.URL + "/photo.png",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	srv, err := New(Options{
+		Program: testProgram(),
+		Set:     set,
+		Theme:   th,
+		// Long enough that a per-load fetch would be unmistakable — a failed
+		// fetch is not cached, so rendering cards in the page would pay this
+		// on every load. The probe pays it once.
+		Images:  &cache.Cache{Dir: filepath.Join(dir, "img"), TTL: time.Minute, Timeout: 2 * time.Second},
+		Size:    "portrait",
+		OutDir:  filepath.Join(dir, "out"),
+		NoLinks: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := srv.Handler()
+
+	// The probe pays the timeout once and remembers the answer, so the page
+	// itself must be quick — and quick again.
+	get(t, h, "/")
+	for i := range 3 {
+		start := time.Now()
+		rec := get(t, h, "/")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("load %d: status = %d", i, rec.Code)
+		}
+		if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
+			t.Errorf("load %d took %v; the page is waiting on the photo", i, elapsed)
+		}
+		// And it still reports the fallback, which is the whole reason the
+		// probe exists.
+		if !strings.Contains(rec.Body.String(), "showing initials") {
+			t.Error("the page does not report that the card fell back to initials")
+		}
+	}
+
+	// An edit must not block on it either.
+	start := time.Now()
+	rec := postForm(t, h, "/speaker/dario-haaland", url.Values{
+		"talk": {talkID}, "employer": {"Corp"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("edit status = %d", rec.Code)
+	}
+	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
+		t.Errorf("an edit took %v with a dead photo host", elapsed)
+	}
+}

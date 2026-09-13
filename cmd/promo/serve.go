@@ -82,17 +82,15 @@ func cmdServe(args []string) error {
 		return fmt.Errorf("listening on %s: %w", *addr, err)
 	}
 
-	// Fetching social handles is the slow part — 49 speaker pages at ~3 MB —
-	// so it happens here with a progress line rather than inside the first page
-	// load, where it looked like a hung browser.
-	if !*noLinks {
-		fmt.Print("fetching speaker profiles… ")
-		server.Warm(6, func(done, total int) {
-			if done == total {
-				fmt.Printf("%d/%d\n", done, total)
-			}
-		})
-	}
+	// Fetching profiles and photos is the slow part — 49 speaker pages at ~3 MB
+	// each — so it happens here with a progress line rather than inside the
+	// first page load, where it looked like a hung browser.
+	fmt.Print("fetching speaker profiles and photos… ")
+	server.Warm(6, func(done, total int) {
+		if done == total {
+			fmt.Printf("%d/%d\n", done, total)
+		}
+	})
 	fmt.Printf("%s — %d talks\n", program.Conference.Title, len(program.Sessions))
 	fmt.Printf("overrides: %s\n", set.Path())
 	fmt.Printf("\n  http://%s\n\n", ln.Addr())
