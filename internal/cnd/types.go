@@ -10,33 +10,33 @@ import (
 
 // Conference is the event a program belongs to.
 type Conference struct {
-	Title     string
-	StartDate string // ISO date, e.g. "2026-10-26"
-	EndDate   string
-	City      string
-	Country   string
-	Domain    string // primary public domain
+	Title     string `json:"title"`
+	StartDate string `json:"startDate"` // ISO date, e.g. "2026-10-26"
+	EndDate   string `json:"endDate"`
+	City      string `json:"city"`
+	Country   string `json:"country"`
+	Domain    string `json:"domain"` // primary public domain
 	// LogoBright is the conference wordmark as inline SVG, in the light-on-dark
 	// variant. Promo cards paint on a saturated brand gradient, so this is the
 	// variant that applies; LogoDark is kept for light themes.
-	LogoBright string
-	LogoDark   string
+	LogoBright string `json:"-"`
+	LogoDark   string `json:"-"`
 	// LogomarkBright is the square mark without wordmark, for tight layouts.
-	LogomarkBright string
+	LogomarkBright string `json:"-"`
 }
 
 // Speaker is one presenter of a talk.
 type Speaker struct {
-	ID   string
-	Name string
-	Slug string
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Slug string `json:"slug"`
 	// Title is free text from the speaker's profile and is wildly inconsistent
 	// across speakers: "Staff Developer Advocate at Vestbit Labs", "Bysten Labs",
 	// "Utvikler hos Bergsdal", or empty. There is no structured employer field, so
 	// anything that needs an employer has to guess — see Employer in post copy.
-	Title string
+	Title string `json:"title"`
 	// Image is a cdn.sanity.io URL. It accepts crop transforms; use ImageURL.
-	Image string
+	Image string `json:"image,omitempty"`
 }
 
 // ImageURL returns the speaker photo cropped to a square of the given size.
@@ -56,32 +56,32 @@ func (s Speaker) ImageURL(size int) string {
 
 // Talk is an accepted session.
 type Talk struct {
-	ID string
+	ID string `json:"id"`
 	// Title is presenter-authored and may contain emoji, which no text font
 	// covers. See internal/layout for how that is handled.
-	Title string
+	Title string `json:"title"`
 	// Abstract is the talk description flattened to plain text.
-	Abstract string
-	Format   string // e.g. "workshop_120", "presentation_25"
-	Level    string // e.g. "beginner", "intermediate", "advanced"
-	Topics   []string
-	Speakers []Speaker
+	Abstract string    `json:"abstract,omitempty"`
+	Format   string    `json:"format,omitempty"` // e.g. "workshop_120", "presentation_25"
+	Level    string    `json:"level,omitempty"`  // e.g. "beginner", "intermediate", "advanced"
+	Topics   []string  `json:"topics,omitempty"`
+	Speakers []Speaker `json:"speakers"`
 }
 
 // Session is a talk placed in the schedule.
 type Session struct {
-	Talk      Talk
-	Date      string // ISO date of the day it runs
-	Day       int    // 1-based day index within the conference
-	Track     string
-	StartTime string // "HH:MM"
-	EndTime   string
+	Talk      Talk   `json:"talk"`
+	Date      string `json:"date"` // ISO date of the day it runs
+	Day       int    `json:"day"`  // 1-based day index within the conference
+	Track     string `json:"track"`
+	StartTime string `json:"startTime"` // "HH:MM"
+	EndTime   string `json:"endTime"`
 }
 
 // Program is a conference and its scheduled sessions.
 type Program struct {
-	Conference Conference
-	Sessions   []Session
+	Conference Conference `json:"conference"`
+	Sessions   []Session  `json:"sessions"`
 }
 
 // Speakers returns every distinct speaker in the program, in first-appearance
