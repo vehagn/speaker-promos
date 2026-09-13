@@ -22,6 +22,8 @@ func cmdSVG(args []string) error {
 	themePath := fs.String("theme", "", "theme YAML to merge over the built-in theme")
 	noPhotos := fs.Bool("no-photos", false, "skip speaker photos (renders initials instead)")
 	stripEmoji := fs.Bool("strip-emoji", false, "remove emoji rather than relying on a system emoji font")
+	png := fs.Bool("png", false, "also rasterise each card to PNG, if a converter is installed")
+	pngWidth := fs.Int("png-width", 0, "PNG width in pixels (default: the card's own width)")
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
@@ -61,7 +63,19 @@ func cmdSVG(args []string) error {
 		return fmt.Errorf("creating %s: %w", *out, err)
 	}
 
+	// The converter is resolved once, before any work, so that a --png run with
+	// nothing installed still writes every SVG and reports the miss once.
+	var conv converter
+	haveConv := false
+	if *png {
+		var path string
+		if conv, path, haveConv = findConverter(); haveConv {
+			fmt.Printf("rasterising with %s\n", path)
+		}
+	}
+
 	var withEmoji, truncated []string
+	rasterNeedsFonts := false
 	for _, s := range sessions {
 		for _, size := range wanted {
 			res, err := renderer.Card(program.Conference, s, size)
@@ -83,6 +97,27 @@ func cmdSVG(args []string) error {
 				truncated = append(truncated, fmt.Sprintf("%s (%s)", s.Talk.Title, strings.Join(res.Overflow, ", ")))
 			}
 			fmt.Printf("%s  %s\n", path, humanBytes(len(res.SVG)))
+
+			if haveConv {
+				g, err := th.Size(size)
+				if err != nil {
+					return err
+				}
+				width := *pngWidth
+				if width <= 0 {
+					width = g.Width
+				}
+				pngPath := strings.TrimSuffix(path, ".svg") + ".png"
+				if err := exportPNG(conv, path, pngPath, width); err != nil {
+					return err
+				}
+				if fi, err := os.Stat(pngPath); err == nil {
+					fmt.Printf("%s  %s\n", pngPath, humanBytes(int(fi.Size())))
+				}
+				if !conv.embedsFonts {
+					rasterNeedsFonts = true
+				}
+			}
 		}
 	}
 	fmt.Printf("\n%d cards written to %s\n", len(sessions)*len(wanted), *out)
@@ -96,6 +131,16 @@ func cmdSVG(args []string) error {
 		for _, t := range dedupe(withEmoji) {
 			fmt.Fprintf(os.Stderr, "  %s\n", t)
 		}
+	}
+	if *png && !haveConv {
+		fmt.Fprint(os.Stderr, "\n"+noConverterMessage)
+	}
+	// Inkscape and librsvg ignore base64 @font-face, so a PNG from them falls
+	// back to a default face unless the fonts are installed. Saying so here is
+	// the difference between a puzzling export and a one-command fix.
+	if rasterNeedsFonts {
+		fmt.Fprintf(os.Stderr, "\nnote: %s does not read the fonts embedded in the SVG. If the PNGs\n"+
+			"use the wrong typeface, run \"promo fonts install\" and export again.\n", conv.name)
 	}
 	if len(truncated) > 0 {
 		fmt.Fprintf(os.Stderr, "\nwarning: text was truncated to fit on %d card(s); "+
