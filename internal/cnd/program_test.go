@@ -1,0 +1,324 @@
+package cnd
+
+import (
+	"compress/gzip"
+	"io"
+	"os"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/vehagn/speaker-promos/internal/rsc"
+)
+
+// The fixture is the real program page with everything but its RSC payload
+// stripped, gzipped to keep the repository small. Testing against the genuine
+// payload is the point: the parser's contract is with a page this tool does not
+// control, so a hand-written fixture would only prove the parser agrees with
+// itself.
+var loadFixture = sync.OnceValues(func() (*Program, error) {
+	f, err := os.Open("testdata/program.html.gz")
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	zr, err := gzip.NewReader(f)
+	if err != nil {
+		return nil, err
+	}
+	html, err := io.ReadAll(zr)
+	if err != nil {
+		return nil, err
+	}
+
+	flight, err := rsc.Chunks(string(html))
+	if err != nil {
+		return nil, err
+	}
+	rows := rsc.Rows(flight)
+	conf, err := decodeConference(flight, rows, "2026.cloudnativedays.no")
+	if err != nil {
+		return nil, err
+	}
+	sessions, err := decodeSessions(flight, rows)
+	if err != nil {
+		return nil, err
+	}
+	return &Program{Conference: conf, Sessions: sessions}, nil
+})
+
+func fixture(t *testing.T) *Program {
+	t.Helper()
+	p, err := loadFixture()
+	if err != nil {
+		t.Fatalf("loading fixture: %v", err)
+	}
+	return p
+}
+
+func TestDecodeConference(t *testing.T) {
+	c := fixture(t).Conference
+
+	if c.Title != "Cloud Native Days Norway 2026" {
+		t.Errorf("Title = %q", c.Title)
+	}
+	if c.StartDate != "2026-10-26" || c.EndDate != "2026-10-27" {
+		t.Errorf("dates = %s..%s", c.StartDate, c.EndDate)
+	}
+	if got := c.Location(); got != "Bergen, Norway" {
+		t.Errorf("Location = %q", got)
+	}
+	if got := c.DateRange(); got != "26–27 October 2026" {
+		t.Errorf("DateRange = %q", got)
+	}
+	if got := c.URL(); got != "https://2026.cloudnativedays.no" {
+		t.Errorf("URL = %q", got)
+	}
+	// The logo arrives as a $ref to a ~190 KB row; if it were left unresolved
+	// the card would contain the literal text "$36".
+	if !strings.HasPrefix(c.LogoBright, "<svg") {
+		t.Errorf("LogoBright not inline SVG: %.40q", c.LogoBright)
+	}
+	if len(c.LogoBright) < 1000 {
+		t.Errorf("LogoBright suspiciously short: %d bytes", len(c.LogoBright))
+	}
+	// logomarkDark is "$undefined" upstream and must be dropped, not pasted in.
+	if strings.Contains(c.LogoDark, "$") && !strings.HasPrefix(c.LogoDark, "<svg") {
+		t.Errorf("LogoDark = %.40q, want SVG or empty", c.LogoDark)
+	}
+}
+
+func TestDecodeSessions(t *testing.T) {
+	p := fixture(t)
+
+	if got := len(p.Sessions); got != 36 {
+		t.Errorf("sessions = %d, want 36", got)
+	}
+	if got := len(p.Speakers()); got != 49 {
+		t.Errorf("speakers = %d, want 49", got)
+	}
+
+	days := map[int]string{}
+	for _, s := range p.Sessions {
+		days[s.Day] = s.Date
+		if s.Talk.Title == "" {
+			t.Error("session with empty talk title got through")
+		}
+		if s.Talk.ID == "" {
+			t.Errorf("talk %q has no id", s.Talk.Title)
+		}
+		if len(s.Talk.Speakers) == 0 {
+			t.Errorf("talk %q has no speakers", s.Talk.Title)
+		}
+		if s.Track == "" {
+			t.Errorf("talk %q has no track", s.Talk.Title)
+		}
+	}
+	if days[1] != "2026-10-26" || days[2] != "2026-10-27" {
+		t.Errorf("day numbering = %v, want day 1 first by date", days)
+	}
+}
+
+// No field anywhere may retain an unresolved reference; these become visible
+// text in a rendered promo.
+func TestNoUnresolvedReferences(t *testing.T) {
+	p := fixture(t)
+	for _, s := range p.Sessions {
+		for _, field := range []struct{ name, val string }{
+			{"title", s.Talk.Title},
+			{"abstract", s.Talk.Abstract},
+		} {
+			if strings.HasPrefix(field.val, "$") || strings.Contains(field.val, "\"$") {
+				t.Errorf("talk %q %s holds a reference: %.60q", s.Talk.Title, field.name, field.val)
+			}
+		}
+		for _, sp := range s.Talk.Speakers {
+			if strings.HasPrefix(sp.Name, "$") || strings.HasPrefix(sp.Title, "$") {
+				t.Errorf("speaker %q holds a reference (title %q)", sp.Name, sp.Title)
+			}
+		}
+	}
+}
+
+// The description is Portable Text whose long spans are $refs; flattening has
+// to run after resolution or abstracts come out with "$55" embedded mid-word.
+func TestAbstractsAreFlattenedPlainText(t *testing.T) {
+	p := fixture(t)
+
+	withAbstract := 0
+	for _, s := range p.Sessions {
+		if s.Talk.Abstract == "" {
+			continue
+		}
+		withAbstract++
+		if strings.Contains(s.Talk.Abstract, `"_type"`) || strings.Contains(s.Talk.Abstract, `"_key"`) {
+			t.Errorf("talk %q abstract still holds Portable Text JSON", s.Talk.Title)
+		}
+	}
+	if withAbstract < 30 {
+		t.Errorf("only %d/%d talks got an abstract", withAbstract, len(p.Sessions))
+	}
+
+	// The Norwegian workshop's abstract is assembled from a $ref mid-paragraph;
+	// resolving it is what makes the full sentence appear.
+	s, err := p.FindOne("Nok nok Nett")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(s.Talk.Abstract, "digital suverenitet") {
+		t.Errorf("abstract missing text from the resolved reference:\n%.300s", s.Talk.Abstract)
+	}
+}
+
+func TestSpeakerImageURL(t *testing.T) {
+	s := Speaker{Image: "https://cdn.sanity.io/images/mvzwvw14/production/abc-740x827.png"}
+	if got, want := s.ImageURL(600), s.Image+"?w=600&h=600&fit=crop"; got != want {
+		t.Errorf("ImageURL = %q", got)
+	}
+	// An URL that already carries a query must gain "&", not a second "?".
+	q := Speaker{Image: "https://cdn.sanity.io/x.png?rect=1,2,3,4"}
+	if got := q.ImageURL(600); !strings.Contains(got, "?rect=1,2,3,4&w=600") {
+		t.Errorf("ImageURL with existing query = %q", got)
+	}
+	if got := (Speaker{}).ImageURL(600); got != "" {
+		t.Errorf("ImageURL without photo = %q, want empty", got)
+	}
+}
+
+func TestFindSelectorTiers(t *testing.T) {
+	p := fixture(t)
+
+	// Speaker slug.
+	got, err := p.FindOne("gunvor-rønning")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got.Talk.Title, "Nok nok Nett") {
+		t.Errorf("slug selector found %q", got.Talk.Title)
+	}
+
+	// Talk id prefix beats everything else.
+	byID, err := p.FindOne(got.Talk.ID[:8])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if byID.Talk.ID != got.Talk.ID {
+		t.Errorf("id selector found %q", byID.Talk.Title)
+	}
+
+	// Title substring, case-insensitively.
+	if _, err := p.FindOne("Nok nok nett"); err != nil {
+		t.Errorf("title substring: %v", err)
+	}
+
+	// Slug-form title, so Norwegian letters can be typed as ASCII.
+	if _, err := p.FindOne("Nok-nok-nett"); err != nil {
+		t.Errorf("slug-form title: %v", err)
+	}
+
+	if _, err := p.FindOne("definitely-not-a-talk"); err == nil {
+		t.Error("want error for unmatched selector")
+	}
+}
+
+func TestFindOneReportsAmbiguity(t *testing.T) {
+	p := fixture(t)
+	// A single letter matches many titles; the error must name the candidates
+	// rather than silently picking one.
+	_, err := p.FindOne("e")
+	if err == nil {
+		t.Fatal("want ambiguity error")
+	}
+	if !strings.Contains(err.Error(), "matches") {
+		t.Errorf("error = %v", err)
+	}
+}
+
+func TestFileStemIsScheduleOrdered(t *testing.T) {
+	p := fixture(t)
+	seen := map[string]string{}
+	for _, s := range p.Sessions {
+		stem := s.FileStem()
+		if stem == "" {
+			t.Errorf("empty stem for %q", s.Talk.Title)
+		}
+		if strings.ContainsAny(stem, "/ .") {
+			t.Errorf("stem %q unsafe as a filename", stem)
+		}
+		if prev, dup := seen[stem]; dup {
+			t.Errorf("stem %q collides: %q and %q", stem, prev, s.Talk.Title)
+		}
+		seen[stem] = s.Talk.Title
+		if !strings.HasPrefix(stem, "d1-") && !strings.HasPrefix(stem, "d2-") {
+			t.Errorf("stem %q does not lead with the day", stem)
+		}
+	}
+}
+
+func TestSpeakerNames(t *testing.T) {
+	mk := func(names ...string) Session {
+		var sp []Speaker
+		for _, n := range names {
+			sp = append(sp, Speaker{Name: n})
+		}
+		return Session{Talk: Talk{Speakers: sp}}
+	}
+	for _, tc := range []struct {
+		in   Session
+		want string
+	}{
+		{mk(), ""},
+		{mk("A"), "A"},
+		{mk("A", "B"), "A and B"},
+		{mk("A", "B", "C"), "A, B and C"},
+	} {
+		if got := tc.in.SpeakerNames(); got != tc.want {
+			t.Errorf("SpeakerNames = %q, want %q", got, tc.want)
+		}
+	}
+}
+
+func TestFirstSentences(t *testing.T) {
+	text := "Første setning her. Andre setning som er ganske lang og fortsetter. Tredje."
+	if got := FirstSentences(text, 200); got != text {
+		t.Errorf("short-circuit failed: %q", got)
+	}
+	got := FirstSentences(text, 30)
+	if !strings.HasSuffix(got, ".") || len([]rune(got)) > 30 {
+		t.Errorf("FirstSentences = %q, want a sentence-boundary cut within 30 runes", got)
+	}
+	// No sentence end early enough: fall back to a word boundary with an ellipsis.
+	noStop := FirstSentences("aaa bbb ccc ddd eee fff ggg hhh", 12)
+	if !strings.HasSuffix(noStop, "…") || strings.HasSuffix(noStop, " …") {
+		t.Errorf("word-boundary fallback = %q", noStop)
+	}
+}
+
+func TestFormatAndLevelLabels(t *testing.T) {
+	if got := (Talk{Format: "workshop_120"}).FormatLabel(); got != "2 h workshop" {
+		t.Errorf("FormatLabel = %q", got)
+	}
+	// An unknown format must degrade to something readable, not vanish.
+	if got := (Talk{Format: "keynote_60"}).FormatLabel(); got != "Keynote 60" {
+		t.Errorf("unknown FormatLabel = %q", got)
+	}
+	if got := (Talk{Level: "intermediate"}).LevelLabel(); got != "Intermediate" {
+		t.Errorf("LevelLabel = %q", got)
+	}
+	if got := (Talk{}).FormatLabel(); got != "" {
+		t.Errorf("empty FormatLabel = %q", got)
+	}
+}
+
+func TestSlugifyNorwegian(t *testing.T) {
+	for in, want := range map[string]string{
+		"Håvard Østby":     "havard-ostby",
+		"Æsj og Ørn":       "aesj-og-orn",
+		"Pods on Mars!":    "pods-on-mars",
+		"  spaced   out  ": "spaced-out",
+	} {
+		if got := slugify(in); got != want {
+			t.Errorf("slugify(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
