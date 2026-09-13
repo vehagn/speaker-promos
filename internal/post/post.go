@@ -62,7 +62,7 @@ func LinkedIn(in Input) Draft {
 	if track := shortTrack(s.Track); track != "" {
 		fmt.Fprintf(&b, "📍 %s\n", track)
 	}
-	if url := speakerURL(in); url != "" {
+	if url := talkURL(in); url != "" {
 		fmt.Fprintf(&b, "\n%s\n", url)
 	}
 
@@ -85,7 +85,7 @@ func Bluesky(in Input) Draft {
 	d.Platform = "bluesky"
 	s := in.Session
 
-	url := speakerURL(in)
+	url := talkURL(in)
 	mentions := blueskyMentions(in)
 
 	// The post is built as head + optional middle + tail. The tail holds the
@@ -192,15 +192,19 @@ func dayLabel(conf cnd.Conference, s cnd.Session) string {
 	return conf.DateRange()
 }
 
-// speakerURL is the single most useful link for a promo: a talk has no page of
-// its own, so the first speaker's profile is used, which lists their session.
-func speakerURL(in Input) string {
-	for _, sp := range in.Speakers {
-		if u := in.Conference.SpeakerURL(sp.Speaker); u != "" {
-			return u
-		}
-	}
-	return in.Conference.URL() + "/program"
+// talkURL is the link a promo points at: the program.
+//
+// A talk has no page of its own — the site's sitemap has 49 `/speaker/<slug>`
+// URLs and one `/program`, and the program page holds its filters in client
+// state with no URL parameters or per-talk anchors, so there is nothing to deep
+// link to. The program is therefore the closest thing to "this talk".
+//
+// This deliberately does NOT fall back to a speaker's profile. Doing that read
+// oddly on a multi-speaker talk, where it silently promoted whoever happened to
+// be listed first. Speaker profiles are still surfaced — as Bluesky mentions in
+// the post itself, and as URLs from Mentions for LinkedIn.
+func talkURL(in Input) string {
+	return in.Conference.ProgramURL()
 }
 
 // blueskyMentions builds "@handle" mentions, which Bluesky resolves from plain

@@ -143,7 +143,7 @@ go run ./cmd/promo post --platform bluesky --all
 ```
 
 ```
-── bluesky (271/300 chars) ──
+── bluesky (256/300 chars) ──
 
 Lucia Ferreira (Havbris) is speaking at Cloud Native Days Norway 2026 🎤
 
@@ -152,7 +152,7 @@ Lucia Ferreira (Havbris) is speaking at Cloud Native Days Norway 2026 🎤
 09:10–09:50 · Tuesday 27 October
 
 @audun.bsky.social
-https://2026.cloudnativedays.no/speaker/emeka-okafor
+https://2026.cloudnativedays.no/program
 
 check before posting:
   - employer for Lucia Ferreira guessed as "Havbris" from "Senior Cloud Dev Advocate @Havbris" — check it
@@ -162,6 +162,17 @@ Bluesky copy is assembled to fit 300 characters with the handles and link reserv
 so shortening never eats the link. LinkedIn copy is longer and lists profile URLs
 separately, because LinkedIn only turns a mention into a link when it is picked from its
 own autocomplete.
+
+### The link goes to the program
+
+Posts link to `/program`, not to a speaker profile. Talks have no page of their own: the
+site's sitemap carries 49 `/speaker/<slug>` URLs and exactly one `/program`, and the
+program page keeps its filters in client state with no URL parameters and no per-talk
+anchors — so there is nothing talk-specific to link to, and the program is the closest
+thing to "this talk".
+
+Speakers are still surfaced: as `@handle` mentions in the Bluesky body, and as profile URLs
+under *profiles to mention* for LinkedIn.
 
 ### Employers are guessed
 

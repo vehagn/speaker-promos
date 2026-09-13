@@ -340,3 +340,23 @@ func TestFindMatchesTransliteratedSpeakerSlug(t *testing.T) {
 		t.Errorf("ASCII selector found %q, want %q", ascii.Talk.Title, exact.Talk.Title)
 	}
 }
+
+func TestConferenceURLs(t *testing.T) {
+	c := fixture(t).Conference
+	if got := c.ProgramURL(); got != "https://2026.cloudnativedays.no/program" {
+		t.Errorf("ProgramURL = %q", got)
+	}
+	if got := c.SpeakerURL(Speaker{Slug: "gunvor-rønning"}); got != "https://2026.cloudnativedays.no/speaker/gunvor-rønning" {
+		t.Errorf("SpeakerURL = %q", got)
+	}
+	// Without a domain there is nothing valid to emit, so callers get "" and
+	// can omit the link rather than print a broken one.
+	empty := Conference{}
+	if empty.ProgramURL() != "" || empty.URL() != "" || empty.SpeakerURL(Speaker{Slug: "x"}) != "" {
+		t.Error("a conference with no domain should yield no URLs")
+	}
+	// A speaker with no slug has no profile page.
+	if got := c.SpeakerURL(Speaker{}); got != "" {
+		t.Errorf("SpeakerURL without a slug = %q", got)
+	}
+}

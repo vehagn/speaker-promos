@@ -167,6 +167,20 @@ func (c Conference) URL() string {
 	return "https://" + c.Domain
 }
 
+// ProgramURL is the schedule page.
+//
+// This is the closest thing to a link for an individual talk. The site has no
+// per-talk page — its sitemap carries 49 `/speaker/<slug>` URLs and exactly one
+// `/program` — and the program page keeps its filters in client state with no
+// URL parameters and renders no per-talk anchors, so there is nothing to deep
+// link to either.
+func (c Conference) ProgramURL() string {
+	if c.Domain == "" {
+		return ""
+	}
+	return "https://" + c.Domain + "/program"
+}
+
 // SpeakerURL is the public profile page for a speaker.
 func (c Conference) SpeakerURL(s Speaker) string {
 	if c.Domain == "" || s.Slug == "" {

@@ -136,7 +136,7 @@ func TestLinkedInDraft(t *testing.T) {
 		"13:20–13:45",
 		"Monday 26 October",
 		"Platform Engineering",
-		"https://2026.cloudnativedays.no/speaker/sindre-vik",
+		"https://2026.cloudnativedays.no/program",
 		"#CloudNativeDaysNorway",
 	} {
 		if !strings.Contains(d.Text, want) {
@@ -194,7 +194,7 @@ func TestBlueskyKeepsBothSlotAndTeaser(t *testing.T) {
 	if !strings.Contains(d.Text, "@sindre.example") {
 		t.Errorf("mention missing:\n%s", d.Text)
 	}
-	if !strings.Contains(d.Text, "https://2026.cloudnativedays.no/speaker/sindre-vik") {
+	if !strings.Contains(d.Text, "https://2026.cloudnativedays.no/program") {
 		t.Errorf("link missing:\n%s", d.Text)
 	}
 }
@@ -321,6 +321,47 @@ func TestJoinAnd(t *testing.T) {
 	} {
 		if got := joinAnd(tc.in); got != tc.want {
 			t.Errorf("joinAnd(%v) = %q", tc.in, got)
+		}
+	}
+}
+
+// The link is the talk's, not a speaker's. Falling back to the first speaker's
+// profile read oddly on a multi-speaker talk, where it silently promoted
+// whoever happened to be listed first.
+func TestLinkPointsAtTheProgramNotASpeaker(t *testing.T) {
+	in := testInput()
+	in.Speakers = append(in.Speakers, Speaker{
+		Speaker: cnd.Speaker{Name: "Second Person", Slug: "second-person"},
+		Role:    Role{Employer: "Acme"},
+	})
+
+	for _, d := range []Draft{LinkedIn(in), Bluesky(in)} {
+		if !strings.Contains(d.Text, "https://2026.cloudnativedays.no/program") {
+			t.Errorf("%s: want the program link:\n%s", d.Platform, d.Text)
+		}
+		if strings.Contains(d.Text, "/speaker/") {
+			t.Errorf("%s: post body should not link a speaker profile:\n%s", d.Platform, d.Text)
+		}
+	}
+
+	// Profiles are still surfaced for the user to turn into real mentions.
+	mentions := Mentions(in)
+	if len(mentions) == 0 || !strings.Contains(mentions[0], "linkedin.com/in/sindre") {
+		t.Errorf("Mentions lost the speaker profiles: %v", mentions)
+	}
+}
+
+// A conference with no known domain must simply omit the link rather than emit
+// a malformed one.
+func TestNoDomainOmitsTheLink(t *testing.T) {
+	in := testInput()
+	in.Conference.Domain = ""
+	for _, d := range []Draft{LinkedIn(in), Bluesky(in)} {
+		if strings.Contains(d.Text, "http") {
+			t.Errorf("%s: emitted a link without a domain:\n%s", d.Platform, d.Text)
+		}
+		if !strings.Contains(d.Text, "Pods on Mars") {
+			t.Errorf("%s: lost the rest of the copy:\n%s", d.Platform, d.Text)
 		}
 	}
 }
