@@ -128,6 +128,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /speaker/{slug}", s.handleSpeakerUpdate)
 	mux.HandleFunc("GET /download/{id}", s.handleDownload)
 	mux.HandleFunc("POST /export", s.handleExport)
+	mux.HandleFunc("POST /import", s.handleImport)
 	mux.Handle("GET /static/", http.FileServerFS(files))
 	return mux
 }

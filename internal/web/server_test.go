@@ -628,3 +628,170 @@ func tinyPNG(t *testing.T) []byte {
 	}
 	return buf.Bytes()
 }
+
+// The import button is the mirror of the export button, so the two together
+// close the loop without dropping to a terminal.
+func TestImportButtonIsPresent(t *testing.T) {
+	_, h, _ := newTestServer(t)
+	body := get(t, h, "/").Body.String()
+
+	for _, want := range []string{
+		`hx-post="/import"`,
+		// It swaps the whole row list, since a merge can change any number of
+		// talks.
+		`hx-target="#rows"`,
+		`name="confirm-guesses"`,
+		`id="status"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("index missing %q", want)
+		}
+	}
+}
+
+// Having nothing to import is a normal state, not an error, and the message has
+// to say what to do rather than surface a stat failure.
+func TestImportWithNothingExported(t *testing.T) {
+	_, h, _ := newTestServer(t)
+	rec := postForm(t, h, "/import", url.Values{})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d\n%s", rec.Code, rec.Body)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "nothing to import") {
+		t.Errorf("body = %q", body)
+	}
+	if !strings.Contains(body, "Export all") {
+		t.Error("the message should say what to do next")
+	}
+	if strings.Contains(body, "no such file or directory") {
+		t.Error("a raw stat error leaked into the UI")
+	}
+	// The rows still come back, so the page is not left empty.
+	if !strings.Contains(body, `id="rows"`) {
+		t.Error("the row list was not re-rendered")
+	}
+}
+
+// The whole loop, through the same code the CLI uses.
+func TestImportButtonMergesAnEditedBundle(t *testing.T) {
+	srv, h, manifestPath := newTestServer(t)
+
+	if rec := postForm(t, h, "/export", url.Values{"size": {"portrait"}}); rec.Code != http.StatusOK {
+		t.Fatalf("export failed: %s", rec.Body)
+	}
+
+	// Unedited bundles must import as nothing: they carry pre-filled guesses,
+	// and taking those would silence the warnings that exist to be read.
+	rec := postForm(t, h, "/import", url.Values{})
+	if !strings.Contains(rec.Body.String(), "nothing to import from") {
+		t.Errorf("an unedited import changed something: %s", rec.Body)
+	}
+
+	// Edit one bundle's override document, leaving the record alone.
+	bundles, _ := filepath.Glob(filepath.Join(srv.opts.OutDir, "*", "promo.yaml"))
+	var edited string
+	for _, b := range bundles {
+		if strings.Contains(b, "dario-haaland") {
+			edited = b
+		}
+	}
+	if edited == "" {
+		t.Fatalf("no bundle for the speaker: %v", bundles)
+	}
+	raw, err := os.ReadFile(edited)
+	if err != nil {
+		t.Fatal(err)
+	}
+	docs := strings.Split(string(raw), "\n---\n")
+	for i, d := range docs {
+		if strings.Contains(d, "kind: SpeakerOverride") {
+			docs[i] = strings.Replace(d, "\n  name: Dario Haaland", "\n  name: Dárió Håaland", 1)
+		}
+	}
+	if err := os.WriteFile(edited, []byte(strings.Join(docs, "\n---\n")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rec = postForm(t, h, "/import", url.Values{})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d\n%s", rec.Code, rec.Body)
+	}
+	body := rec.Body.String()
+
+	// The report names the change, so an import is never silent.
+	if !strings.Contains(body, "imported 1 change") {
+		t.Errorf("report = %q", body)
+	}
+	if !strings.Contains(body, "SpeakerOverride/dario-haaland name") {
+		t.Errorf("the report does not name the field: %q", body)
+	}
+	// The status is swapped out-of-band, so it survives replacing the rows.
+	if !strings.Contains(body, `hx-swap-oob="true"`) {
+		t.Error("the status was not swapped out-of-band")
+	}
+	// The re-rendered rows show the imported value.
+	if !strings.Contains(body, "Dárió Håaland") {
+		t.Error("the rows were not re-rendered with the imported name")
+	}
+	// And it reached the project manifest.
+	saved, _ := os.ReadFile(manifestPath)
+	if !strings.Contains(string(saved), "name: Dárió Håaland") {
+		t.Errorf("manifest = %s", saved)
+	}
+}
+
+// Card URLs carry a revision, so an import has to bump it or the browser keeps
+// serving the cards from before the merge.
+func TestImportBumpsTheCardRevision(t *testing.T) {
+	srv, h, _ := newTestServer(t)
+	postForm(t, h, "/export", url.Values{"size": {"portrait"}})
+
+	bundles, _ := filepath.Glob(filepath.Join(srv.opts.OutDir, "*", "promo.yaml"))
+	for _, b := range bundles {
+		if !strings.Contains(b, "dario-haaland") {
+			continue
+		}
+		raw, _ := os.ReadFile(b)
+		docs := strings.Split(string(raw), "\n---\n")
+		for i, d := range docs {
+			if strings.Contains(d, "kind: SpeakerOverride") {
+				docs[i] = strings.Replace(d, "\n  name: Dario Haaland", "\n  name: Ny Navn", 1)
+			}
+		}
+		os.WriteFile(b, []byte(strings.Join(docs, "\n---\n")), 0o644)
+	}
+
+	before := extractCardURL(t, get(t, h, "/talk/"+talkID).Body.String())
+	postForm(t, h, "/import", url.Values{})
+	after := extractCardURL(t, get(t, h, "/talk/"+talkID).Body.String())
+
+	if before == after {
+		t.Errorf("card URL unchanged after an import: %s", before)
+	}
+}
+
+// A malformed bundle is a failure, not a silent skip.
+func TestImportRejectsAMalformedBundle(t *testing.T) {
+	srv, h, manifestPath := newTestServer(t)
+	dir := filepath.Join(srv.opts.OutDir, "broken")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "apiVersion: wrong\nkind: SpeakerOverride\nmetadata:\n  name: a\nspec: {}\n"
+	if err := os.WriteFile(filepath.Join(dir, "promo.yaml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := postForm(t, h, "/import", url.Values{})
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "unsupported apiVersion") {
+		t.Errorf("body = %q", rec.Body)
+	}
+	if _, err := os.Stat(manifestPath); err == nil {
+		t.Error("a failed import wrote the manifest")
+	}
+}

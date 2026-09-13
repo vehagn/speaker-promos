@@ -90,6 +90,17 @@ button.primary { background: var(--brand); border-color: transparent; }
 .meter i.over { background: var(--bad); }
 .notes { margin: 0; padding: 0 12px 12px 28px; color: var(--muted); font-size: 12px; }
 .error { color: var(--bad); padding: 12px; }
+.status:not(:empty) {
+  margin: 18px 24px -6px; padding: 12px 14px; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--panel); font-size: 13px;
+}
+.status ul { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
+.status li { font-family: ui-monospace, monospace; font-size: 12px; }
+.status .none { color: var(--muted); }
+/* Each header action stays on one line: the import's checkbox belongs beside
+   its button, not wrapped above it. */
+header .action { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+header .check { color: rgba(255,255,255,.9); font-size: 12px; gap: 5px; }
 .htmx-request .card img { opacity: .4; transition: opacity .1s; }
 </style>
 </head>
@@ -100,16 +111,23 @@ button.primary { background: var(--brand); border-color: transparent; }
   <span class="spacer"></span>
   <span class="meta">{{len .Talks}} talks</span>
   {{range .Sizes}}<a href="/?size={{.}}"><button {{if eq . $.Size}}class="primary"{{end}}>{{.}}</button></a>{{end}}
-  <form hx-post="/export" hx-target="#export-status" hx-swap="innerHTML" style="display:inline">
+  <form class="action" hx-post="/export" hx-target="#status" hx-swap="innerHTML">
     <input type="hidden" name="size" value="{{.Size}}">
     <button>Export all → {{.OutDir}}/</button>
   </form>
-  <span id="export-status" class="meta"></span>
+  {{/* The import swaps the whole row list, because a merge can change any
+       number of talks; the summary comes back out-of-band into #status. */}}
+  <form class="action" hx-post="/import" hx-target="#rows" hx-swap="outerHTML">
+    <input type="hidden" name="size" value="{{.Size}}">
+    <label class="check" title="Also accept the pre-filled guesses as correct">
+      <input type="checkbox" name="confirm-guesses" value="1"> guesses
+    </label>
+    <button>Import ← {{.OutDir}}/</button>
+  </form>
   <span class="pill">{{.Manifest}}</span>
 </header>
-<main>
-  {{range .Talks}}{{template "talk.html" .}}{{end}}
-</main>
+<div id="status" class="status"></div>
+{{template "rows.html" .}}
 <script>
 // Copy to clipboard. Everything else on the page is HTMX; this is the one
 // interaction with no server round-trip, so it is not worth a dependency.

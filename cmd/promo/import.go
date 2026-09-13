@@ -1,16 +1,12 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
-	"github.com/vehagn/speaker-promos/internal/cnd"
 	"github.com/vehagn/speaker-promos/internal/manifest"
-	"github.com/vehagn/speaker-promos/internal/post"
 )
 
 func cmdImport(args []string) error {
@@ -26,7 +22,7 @@ func cmdImport(args []string) error {
 		return err
 	}
 
-	paths, err := findManifests(fs.Args())
+	paths, err := manifest.FindFiles(fs.Args())
 	if err != nil {
 		return err
 	}
@@ -43,12 +39,9 @@ func cmdImport(args []string) error {
 	if err != nil {
 		return err
 	}
-	opts := manifest.ImportOptions{
-		SpeakerBaseline: speakerBaseline(program),
-		TalkBaseline:    talkBaseline(program),
-		ConfirmGuesses:  *confirm,
-		DryRun:          *dryRun,
-	}
+	opts := manifest.BaselineFor(program)
+	opts.ConfirmGuesses = *confirm
+	opts.DryRun = *dryRun
 
 	var all []manifest.Change
 	for _, path := range paths {
@@ -84,94 +77,6 @@ func cmdImport(args []string) error {
 		fmt.Printf("%d change(s) written to %s\n", len(all), target.Path())
 	}
 	return nil
-}
-
-// findManifests expands the positional arguments into manifest files.
-//
-// A directory is searched rather than rejected, because the thing you have
-// after an export is `out/` — one folder per talk — and asking for every
-// promo.yaml inside it by hand would be absurd.
-func findManifests(args []string) ([]string, error) {
-	if len(args) == 0 {
-		return nil, errors.New("give a promo.yaml, a bundle folder, or an export directory")
-	}
-
-	seen := map[string]bool{}
-	var out []string
-	add := func(p string) {
-		abs, err := filepath.Abs(p)
-		if err != nil {
-			abs = p
-		}
-		if !seen[abs] {
-			seen[abs] = true
-			out = append(out, p)
-		}
-	}
-
-	for _, arg := range args {
-		info, err := os.Stat(arg)
-		if err != nil {
-			return nil, fmt.Errorf("reading %s: %w", arg, err)
-		}
-		if !info.IsDir() {
-			add(arg)
-			continue
-		}
-		var found int
-		err = filepath.WalkDir(arg, func(path string, d os.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if !d.IsDir() && d.Name() == "promo.yaml" {
-				add(path)
-				found++
-			}
-			return nil
-		})
-		if err != nil {
-			return nil, fmt.Errorf("searching %s: %w", arg, err)
-		}
-		if found == 0 {
-			return nil, fmt.Errorf("no promo.yaml found under %s", arg)
-		}
-	}
-	sort.Strings(out)
-	return out, nil
-}
-
-// speakerBaseline reports what the tool would produce for a speaker with no
-// override: their upstream name, and the employer and job guessed out of the
-// free-text profile title.
-func speakerBaseline(program *cnd.Program) func(string) (manifest.SpeakerSpec, bool) {
-	base := map[string]manifest.SpeakerSpec{}
-	for _, sp := range program.Speakers() {
-		if sp.Slug == "" {
-			continue
-		}
-		role := post.ParseRole(sp.Title)
-		base[sp.Slug] = manifest.SpeakerSpec{
-			Name:     sp.Name,
-			Employer: role.Employer,
-			Job:      role.Job,
-		}
-	}
-	return func(slug string) (manifest.SpeakerSpec, bool) {
-		spec, ok := base[slug]
-		return spec, ok
-	}
-}
-
-// talkBaseline reports a talk's submitted title.
-func talkBaseline(program *cnd.Program) func(string) (string, bool) {
-	base := map[string]string{}
-	for _, s := range program.Sessions {
-		base[s.Talk.ID] = s.Talk.Title
-	}
-	return func(id string) (string, bool) {
-		title, ok := base[id]
-		return title, ok
-	}
 }
 
 // relativeTo shortens a path against the working directory for reporting.

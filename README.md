@@ -290,6 +290,9 @@ the record; `git checkout promos.yaml` is the undo.
 - **hidden** excludes a talk from `--all` and from the Export button.
 - **Export all** writes a bundle per visible talk to `--out`, through the same code as
   `promo export --all`, so the two produce identical folders.
+- **Import ← out/** merges the edited `promo.yaml` files back, through the same code as
+  `promo import`. It reports every field it changed, re-renders the affected rows, and
+  leaves unedited bundles alone. Tick **guesses** for `--confirm-guesses`.
 
 Startup fetches the 49 speaker profile pages once (~3 MB each, then cached on disk); after
 that page loads are instant. `--no-links` skips it entirely. Cards are served as the same
@@ -309,7 +312,8 @@ go run ./cmd/promo import out/ --dry-run                # report, write nothing
 ```
 
 A directory is searched for `promo.yaml` rather than rejected, since what you have after an
-export is `out/` with a folder per talk.
+export is `out/` with a folder per talk. `promo serve` has the same thing as an **Import ←
+out/** button, sharing this code so the two cannot disagree about what an import covers.
 
 **It imports the edits, not the file.** An exported `promo.yaml` pre-fills the name and the
 guessed employer, so importing it verbatim would turn every guess into a confirmed

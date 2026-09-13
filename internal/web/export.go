@@ -53,7 +53,7 @@ func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
 		msg += fmt.Sprintf(", %d warning(s)", n)
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprint(w, htmlEscape(msg))
+	fmt.Fprintf(w, "<span>%s</span>", htmlEscape(msg))
 }
 
 // htmlEscape is used for the few plain-text responses that land in the DOM.
