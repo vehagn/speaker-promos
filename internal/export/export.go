@@ -65,9 +65,11 @@ func ParseFormats(spec string) ([]string, error) {
 
 // Exporter writes bundles.
 type Exporter struct {
-	Renderer   *render.Renderer
-	Set        *manifest.Set
-	Conference cnd.Conference
+	Renderer *render.Renderer
+	Set      *manifest.Set
+	// Program supplies the conference and the sessions as submitted, so a
+	// bundle's record can show the original title beside an overridden one.
+	Program *cnd.Program
 
 	// Formats and Sizes select what each bundle contains.
 	Formats []string
@@ -101,7 +103,15 @@ type Result struct {
 }
 
 // Write produces one talk's bundle under root.
+//
+// sess is the session as it will be rendered, overrides already applied. The
+// pre-override form is recovered from the manifest so the record can show a
+// submitted title next to the displayed one.
 func (e *Exporter) Write(root string, sess cnd.Session) (Result, error) {
+	// Applied here rather than trusted from the caller, so a bundle reflects
+	// the manifest as it stands at export time whichever path called in.
+	submitted := e.submitted(sess.Talk.ID)
+	sess = e.Set.Rewrite(sess)
 	res := Result{Dir: sess.FileStem()}
 	dir := filepath.Join(root, res.Dir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -113,7 +123,7 @@ func (e *Exporter) Write(root string, sess cnd.Session) (Result, error) {
 	wantJPG := slices.Contains(e.Formats, FormatJPG)
 
 	for _, size := range e.Sizes {
-		card, err := e.Renderer.Card(e.Conference, sess, size)
+		card, err := e.Renderer.Card(e.conference(), sess, size)
 		if err != nil {
 			return res, fmt.Errorf("rendering %q at %s: %w", sess.Talk.Title, size, err)
 		}
@@ -169,13 +179,15 @@ func (e *Exporter) Write(root string, sess cnd.Session) (Result, error) {
 		}
 	}
 
-	drafts, err := e.writeCopy(dir, sess)
+	in := e.postInput(sess)
+	drafts, err := e.writeCopy(dir, in)
 	if err != nil {
 		return res, err
 	}
 	res.Files = append(res.Files, drafts...)
 
-	yamlName, err := e.writeManifest(dir, sess)
+	// Written last, so it can record which card files the run actually produced.
+	yamlName, err := e.writeManifest(dir, submitted, sess, in, res)
 	if err != nil {
 		return res, err
 	}
@@ -183,9 +195,10 @@ func (e *Exporter) Write(root string, sess cnd.Session) (Result, error) {
 	return res, nil
 }
 
-// writeCopy writes the draft post for each platform.
-func (e *Exporter) writeCopy(dir string, sess cnd.Session) ([]string, error) {
-	in := post.Input{Conference: e.Conference, Session: sess}
+// postInput resolves the speakers once, so the copy and the record cannot
+// disagree about who works where.
+func (e *Exporter) postInput(sess cnd.Session) post.Input {
+	in := post.Input{Conference: e.conference(), Session: sess}
 	overrides := e.Set.Overrides()
 	for _, sp := range sess.Talk.Speakers {
 		var links cnd.Links
@@ -198,7 +211,11 @@ func (e *Exporter) writeCopy(dir string, sess cnd.Session) ([]string, error) {
 			Links:   overrides.LinksFor(sp, links),
 		})
 	}
+	return in
+}
 
+// writeCopy writes the draft post for each platform.
+func (e *Exporter) writeCopy(dir string, in post.Input) ([]string, error) {
 	var written []string
 	for _, d := range []post.Draft{post.LinkedIn(in), post.Bluesky(in)} {
 		name := d.Platform + ".txt"
@@ -248,10 +265,41 @@ func collectNotes(in post.Input) string {
 	return b.String()
 }
 
-// writeManifest writes the editable per-talk override manifest.
-func (e *Exporter) writeManifest(dir string, sess cnd.Session) (string, error) {
+// writeManifest writes the per-talk record and its editable overrides.
+func (e *Exporter) writeManifest(dir string, submitted, sess cnd.Session,
+	in post.Input, res Result) (string, error) {
 	const name = "promo.yaml"
-	data, err := e.Set.ForSession(sess, e.Set.Overrides())
+
+	speakers := make([]manifest.SpeakerInfo, 0, len(in.Speakers))
+	for _, sp := range in.Speakers {
+		speakers = append(speakers, manifest.SpeakerInfo{
+			Name:            sp.Name,
+			Slug:            sp.Slug,
+			ProfileTitle:    sp.Speaker.Title,
+			Employer:        sp.Role.Employer,
+			Job:             sp.Role.Job,
+			EmployerGuessed: sp.Role.Guessed,
+			Image:           sp.Speaker.Image,
+			// Recorded rather than inferred from Image being set: an URL that
+			// fails to fetch also lands on the monogram, and this is the field
+			// that tells you an `image:` override would help.
+			HasPhoto:   e.Renderer.HasPhoto(sp.Speaker),
+			ProfileURL: e.conference().SpeakerURL(sp.Speaker),
+			LinkedIn:   sp.Links.LinkedIn,
+			Bluesky:    sp.Links.Bluesky,
+			X:          sp.Links.X,
+			GitHub:     sp.Links.GitHub,
+		})
+	}
+
+	data, err := e.Set.ForSession(manifest.SessionInfo{
+		Conference: e.conference(),
+		Session:    sess,
+		Submitted:  submitted,
+		Speakers:   speakers,
+		Cards:      cardFiles(res.Files),
+		Warnings:   res.Warnings,
+	}, e.Set.Overrides())
 	if err != nil {
 		return "", err
 	}
@@ -259,4 +307,37 @@ func (e *Exporter) writeManifest(dir string, sess cnd.Session) (string, error) {
 		return "", fmt.Errorf("writing %s: %w", name, err)
 	}
 	return name, nil
+}
+
+// cardFiles keeps just the image files from a bundle's file list.
+func cardFiles(files []string) []string {
+	var out []string
+	for _, f := range files {
+		switch filepath.Ext(f) {
+		case ".svg", ".png", ".jpg":
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// conference is the event a bundle belongs to.
+func (e *Exporter) conference() cnd.Conference {
+	if e.Program == nil {
+		return cnd.Conference{}
+	}
+	return e.Program.Conference
+}
+
+// submitted finds a talk as it was submitted, before any override.
+func (e *Exporter) submitted(talkID string) cnd.Session {
+	if e.Program == nil {
+		return cnd.Session{}
+	}
+	for _, s := range e.Program.Sessions {
+		if s.Talk.ID == talkID {
+			return s
+		}
+	}
+	return cnd.Session{}
 }

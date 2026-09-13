@@ -372,3 +372,104 @@ func TestRewriteWithoutOverridesReturnsInputUnchanged(t *testing.T) {
 		t.Errorf("unchanged session was altered: %+v", got.Talk)
 	}
 }
+
+// TalkInfo is informational: it must load without error and must not become an
+// override, so an exported bundle can be fed straight back.
+func TestTalkInfoIsAcceptedAndIgnored(t *testing.T) {
+	path := tempPath(t)
+	body := "apiVersion: " + APIVersion + `
+kind: TalkInfo
+metadata:
+  name: talk-1
+spec:
+  conference:
+    title: Cloud Native Days Norway 2026
+  talk:
+    id: talk-1
+    title: Kan skyen kjøre?
+  speakers:
+    - name: Dario Haaland
+      hasPhoto: false
+---
+apiVersion: ` + APIVersion + `
+kind: SpeakerOverride
+metadata:
+  name: dario-haaland
+spec:
+  employer: Bysten Labs
+`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	set, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if _, ok := set.Talk("talk-1"); ok {
+		t.Error("TalkInfo was mistaken for a TalkOverride")
+	}
+	if s, tk := set.Len(); s != 1 || tk != 0 {
+		t.Errorf("Len = %d, %d; want 1, 0", s, tk)
+	}
+
+	// Its spec is deliberately not field-checked, so a bundle written by a
+	// newer version stays loadable.
+	unknown := "apiVersion: " + APIVersion + "\nkind: TalkInfo\nmetadata:\n  name: t\nspec:\n  somethingNew: 1\n"
+	if err := os.WriteFile(path, []byte(unknown), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err != nil {
+		t.Errorf("an unknown TalkInfo field should be tolerated: %v", err)
+	}
+}
+
+// The image override has to reach the rendered speaker, and a relative path has
+// to resolve against the manifest rather than the working directory.
+func TestImageOverrideAppliesAndResolves(t *testing.T) {
+	path := tempPath(t)
+	set := New(path)
+	if err := set.SetSpeaker("dario-haaland", SpeakerSpec{Image: "photos/dario.jpg"}); err != nil {
+		t.Fatal(err)
+	}
+	sess := cnd.Session{Talk: cnd.Talk{ID: "t", Speakers: []cnd.Speaker{
+		{Slug: "dario-haaland", Name: "Dario Haaland"},
+		{Slug: "other", Name: "Someone Else", Image: "https://example.com/keep.jpg"},
+	}}}
+
+	got := set.Rewrite(sess)
+	want := filepath.Join(filepath.Dir(path), "photos/dario.jpg")
+	if got.Talk.Speakers[0].Image != want {
+		t.Errorf("image = %q, want %q resolved against the manifest", got.Talk.Speakers[0].Image, want)
+	}
+	if got.Talk.Speakers[1].Image != "https://example.com/keep.jpg" {
+		t.Errorf("an unrelated speaker's image changed: %q", got.Talk.Speakers[1].Image)
+	}
+
+	// An URL and an absolute path are passed through untouched.
+	for _, image := range []string{"https://example.com/a.jpg", "/tmp/a.jpg"} {
+		if err := set.SetSpeaker("dario-haaland", SpeakerSpec{Image: image}); err != nil {
+			t.Fatal(err)
+		}
+		if got := set.Rewrite(sess).Talk.Speakers[0].Image; got != image {
+			t.Errorf("image %q became %q", image, got)
+		}
+	}
+}
+
+// An image-only override is a real override, so it must survive a save/load
+// cycle rather than being pruned as empty.
+func TestImageOnlyOverrideRoundTrips(t *testing.T) {
+	path := tempPath(t)
+	set := New(path)
+	if err := set.SetSpeaker("dario-haaland", SpeakerSpec{Image: "photos/dario.jpg"}); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec, ok := reloaded.Speaker("dario-haaland")
+	if !ok || spec.Image != "photos/dario.jpg" {
+		t.Errorf("reloaded = %+v, ok=%v", spec, ok)
+	}
+}

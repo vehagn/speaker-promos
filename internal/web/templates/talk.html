@@ -62,6 +62,11 @@
             <label>Job title</label>
             <input type="text" name="job" value="{{.Override.Job}}" placeholder="{{.Role.Job}}">
           </div>
+          <div class="{{if not .HasPhoto}}missing{{end}}">
+            <label>Photo {{if not .HasPhoto}}— none, showing initials{{end}}</label>
+            <input type="text" name="image" value="{{.Override.Image}}"
+                   placeholder="{{with .Speaker.Image}}{{.}}{{else}}URL or a file path{{end}}">
+          </div>
           <div>
             <label>LinkedIn</label>
             <input type="text" name="linkedin" value="{{.Override.Links.LinkedIn}}"

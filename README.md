@@ -107,9 +107,16 @@ out/d1-0900-dario-haaland-kan-skyen-kjore-pa-en-brodrister/
 `linkedin.txt` and `bluesky.txt` hold the post and nothing else, so nothing about guessed
 employers can be pasted into a real post by accident.
 
-`promo.yaml` is a manifest for that one talk, pre-filled with the values the cards actually
-used — the correction where you made one, the guess otherwise. Edit it and pass it back with
-`--manifest` to apply it. See [Overrides](#overrides).
+`promo.yaml` is two things in one file. A `TalkInfo` object records everything the tool knew
+when it produced the folder — the conference, the slot, track, format, level, topics,
+abstract, and each speaker's resolved employer, handles, profile URL and whether the card
+got a real photo or fell back to initials. Below it sit the editable `SpeakerOverride` and
+`TalkOverride` objects, pre-filled with the values the cards actually used: the correction
+where you made one, the guess otherwise.
+
+`TalkInfo` is ignored when the file is loaded, so a bundle can be passed straight back with
+`--manifest` after editing — no need to strip the record first. There is deliberately no
+generation timestamp, so re-exporting produces an identical folder.
 
 Cards are self-contained: the speaker photo is an embedded JPEG and the typefaces are
 base64 `@font-face` rules, so one SVG is the whole artifact. Text is real editable
@@ -233,6 +240,7 @@ Editing a field saves it to the manifest immediately and re-renders that one car
 is no save button, and nothing to lose if the browser closes. `git diff promos.yaml` is
 the record; `git checkout promos.yaml` is the undo.
 
+- **Photo** gives a speaker a picture when they have none, or replaces a poor one.
 - **Display title** shortens a title on the card without touching the program.
 - **hidden** excludes a talk from `--all` and from the Export button.
 - **Export all** writes a bundle per visible talk to `--out`, through the same code as
@@ -257,6 +265,7 @@ metadata:
 spec:
   employer: Bysten Labs
   job: Infrastructure Engineer
+  image: photos/dario.jpg         # URL, or a path beside this manifest
   links:
     linkedin: https://www.linkedin.com/in/dario
     bluesky: dario.bsky.social
@@ -272,6 +281,23 @@ spec:
 
 An overridden employer stops being reported as a guess, and reaches the card's role line as
 well as the copy — the card saying the wrong thing is usually why you are correcting it.
+
+### Photos
+
+Five of the 2026 speakers have no photo and render a monogram of their initials instead,
+and a CMS photo is sometimes simply bad. `image:` replaces it with either a URL or a file
+on disk; a relative path resolves against the manifest's own directory, so a bundle can
+carry its own photo next to the `promo.yaml` that names it.
+
+Transform parameters (crop, size, JPEG re-encode) are only added for the CMS CDN, which is
+the only host that understands them — an overridden photo is fetched exactly as given. The
+card clips it to the rounded square either way, so an off-square photo is cropped rather
+than squashed.
+
+`promo serve` shows a **Photo** field per speaker, outlined in cyan and labelled *none,
+showing initials* when the card had to fall back. `hasPhoto` in each bundle's `TalkInfo`
+says the same thing for a whole export — and it reports whether the photo was actually
+*fetched*, so a URL that 404s shows up as `false` rather than looking configured.
 
 `apiVersion`, `kind` and every field name are validated with the line number, so a typo is
 an error rather than an override that silently does nothing:

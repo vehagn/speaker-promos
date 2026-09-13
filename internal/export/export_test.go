@@ -1,6 +1,9 @@
 package export
 
 import (
+	"bytes"
+	"image"
+	"image/png"
 	"os"
 	"path/filepath"
 	"slices"
@@ -52,7 +55,11 @@ func newExporter(t *testing.T, formats []string, withRaster bool) (*Exporter, st
 	}
 	e := &Exporter{
 		Renderer: r, Set: manifest.New(filepath.Join(dir, "promos.yaml")),
-		Conference: testConference(), Formats: formats, Sizes: []string{"portrait"},
+		Program: &cnd.Program{
+			Conference: testConference(),
+			Sessions:   []cnd.Session{testSession()},
+		},
+		Formats: formats, Sizes: []string{"portrait"},
 	}
 	if withRaster {
 		conv, _, ok := raster.Find()
@@ -272,7 +279,7 @@ func TestManifestOmitsAnEmptyTalkOverride(t *testing.T) {
 		t.Fatal(err)
 	}
 	body, _ := os.ReadFile(filepath.Join(root, res.Dir, "promo.yaml"))
-	if strings.Contains(string(body), "TalkOverride") {
+	if strings.Contains(string(body), "kind: TalkOverride") {
 		t.Errorf("unexpected TalkOverride:\n%s", body)
 	}
 
@@ -280,7 +287,7 @@ func TestManifestOmitsAnEmptyTalkOverride(t *testing.T) {
 	if err := e.Set.SetTalk("talk-1", manifest.TalkSpec{DisplayTitle: "Kortere"}); err != nil {
 		t.Fatal(err)
 	}
-	res, err = e.Write(root, e.Set.Rewrite(testSession()))
+	res, err = e.Write(root, testSession())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -322,10 +329,21 @@ func TestSpeakerWithoutSlugIsSkippedInTheManifest(t *testing.T) {
 		t.Fatal(err)
 	}
 	body, _ := os.ReadFile(filepath.Join(root, res.Dir, "promo.yaml"))
-	if strings.Contains(string(body), "Solveig") || strings.Contains(string(body), "Skyvakt") {
-		t.Errorf("wrote a document for a speaker with no slug:\n%s", body)
+
+	// The record lists them — it is a record of the talk, and they are on it.
+	if !strings.Contains(string(body), "Solveig Ulriksen") {
+		t.Errorf("the record dropped a speaker:\n%s", body)
 	}
-	if !strings.Contains(string(body), "dario-haaland") {
+	// But no override document, since there is no slug to key it on.
+	for _, doc := range strings.Split(string(body), "\n---\n") {
+		if !strings.Contains(doc, "kind: SpeakerOverride") {
+			continue
+		}
+		if strings.Contains(doc, "Solveig") || strings.Contains(doc, "Skyvakt") {
+			t.Errorf("wrote an override for a speaker with no slug:\n%s", doc)
+		}
+	}
+	if !strings.Contains(string(body), "name: dario-haaland") {
 		t.Errorf("lost the speaker that does have a slug:\n%s", body)
 	}
 	// The copy still names both.
@@ -333,4 +351,158 @@ func TestSpeakerWithoutSlugIsSkippedInTheManifest(t *testing.T) {
 	if !strings.Contains(string(copyText), "Solveig Ulriksen") {
 		t.Errorf("linkedin.txt lost a speaker: %q", copyText)
 	}
+}
+
+// The record is the "all information" half of promo.yaml: everything the tool
+// knew about the talk when it produced the folder.
+func TestRecordCarriesTheWholeTalk(t *testing.T) {
+	e, root := newExporter(t, []string{FormatSVG}, false)
+	res, err := e.Write(root, testSession())
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(filepath.Join(root, res.Dir, "promo.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(body)
+
+	for _, want := range []string{
+		"kind: " + manifest.KindTalkInfo,
+		"title: Cloud Native Days Norway 2026",
+		"programUrl: https://2026.cloudnativedays.no/program",
+		"id: talk-1",
+		"day: 1",
+		"startTime: \"09:00\"",
+		"track: 'Track 1: Full Day Workshops'",
+		"format: workshop_120",
+		"formatLabel: 2 h workshop",
+		"level: intermediate",
+		"abstract: Plattformer bygges",
+		"name: Dario Haaland",
+		// The free text the employer was guessed from, so a wrong guess can be
+		// judged without opening the website.
+		"profileTitle: Bysten Labs",
+		"employerGuessed: true",
+		// False here, which is exactly the case an image override fixes.
+		"hasPhoto: false",
+		"profileUrl: https://2026.cloudnativedays.no/speaker/dario-haaland",
+		"cards:",
+		"- portrait.svg",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("record missing %q:\n%s", want, text)
+		}
+	}
+
+	// An export must be reproducible, so nothing in the file may vary per run.
+	second, err := e.Write(root, testSession())
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, _ := os.ReadFile(filepath.Join(root, second.Dir, "promo.yaml"))
+	if string(again) != text {
+		t.Error("promo.yaml is not byte-stable across runs")
+	}
+}
+
+// The record shows both titles when a display override is in play, so the
+// folder says what was submitted as well as what the card shows.
+func TestRecordKeepsTheSubmittedTitle(t *testing.T) {
+	e, root := newExporter(t, []string{FormatSVG}, false)
+	if err := e.Set.SetTalk("talk-1", manifest.TalkSpec{DisplayTitle: "Kortere tittel"}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := e.Write(root, testSession())
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := os.ReadFile(filepath.Join(root, res.Dir, "promo.yaml"))
+
+	if !strings.Contains(string(body), "title: Kortere tittel") {
+		t.Errorf("record should show the displayed title:\n%s", body)
+	}
+	if !strings.Contains(string(body), "submittedTitle: Kan skyen kjøre") {
+		t.Errorf("record should keep the submitted title:\n%s", body)
+	}
+}
+
+// The whole file must still load as a manifest, TalkInfo included, so an
+// exported bundle can be fed straight back.
+func TestExportedManifestLoadsWithTheRecordPresent(t *testing.T) {
+	e, root := newExporter(t, []string{FormatSVG}, false)
+	res, err := e.Write(root, testSession())
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, res.Dir, "promo.yaml")
+
+	reloaded, err := manifest.Load(path)
+	if err != nil {
+		t.Fatalf("exported bundle does not load: %v", err)
+	}
+	// TalkInfo is informational and must not become an override.
+	if _, ok := reloaded.Talk("talk-1"); ok {
+		t.Error("TalkInfo was mistaken for a TalkOverride")
+	}
+	spec, ok := reloaded.Speaker("dario-haaland")
+	if !ok || spec.Employer != "Bysten Labs" {
+		t.Errorf("speaker override = %+v, ok=%v", spec, ok)
+	}
+}
+
+// A speaker with no photo is the case the image override exists for: it has to
+// reach the card, and the record has to say the card now has one.
+func TestImageOverrideReachesTheCardAndTheRecord(t *testing.T) {
+	e, root := newExporter(t, []string{FormatSVG}, false)
+
+	// A real 2x2 PNG, so the renderer actually embeds it.
+	photo := filepath.Join(filepath.Dir(e.Set.Path()), "dario.png")
+	if err := os.WriteFile(photo, tinyPNG(t), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Named relatively, which resolves against the manifest's directory rather
+	// than the process working directory.
+	if err := e.Set.SetSpeaker("dario-haaland", manifest.SpeakerSpec{
+		Employer: "Bysten Labs", Image: "dario.png",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := e.Write(root, testSession())
+	if err != nil {
+		t.Fatal(err)
+	}
+	card, err := os.ReadFile(filepath.Join(root, res.Dir, "portrait.svg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(card), "<image") {
+		t.Error("the overridden photo was not embedded in the card")
+	}
+	if strings.Contains(string(card), ">DH<") {
+		t.Error("the card still shows a monogram")
+	}
+
+	body, _ := os.ReadFile(filepath.Join(root, res.Dir, "promo.yaml"))
+	if !strings.Contains(string(body), "hasPhoto: true") {
+		t.Errorf("record should report a photo:\n%s", body)
+	}
+	if !strings.Contains(string(body), "image: dario.png") {
+		t.Errorf("record should name the override's image:\n%s", body)
+	}
+}
+
+// tinyPNG is a 2x2 opaque PNG.
+func tinyPNG(t *testing.T) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	for i := range img.Pix {
+		img.Pix[i] = 0x80
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
 }

@@ -45,6 +45,10 @@ type speakerView struct {
 	// Guessed marks an employer that came from the heuristic rather than the
 	// manifest, so the form can flag it for checking.
 	Guessed bool
+	// HasPhoto is false when the card fell back to a monogram — either because
+	// the speaker has no photo upstream or because the one they have could not
+	// be fetched. It is what the image field on the form is for.
+	HasPhoto bool
 }
 
 // draftView is one platform's copy, with its length budget resolved.

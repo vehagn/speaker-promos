@@ -53,6 +53,9 @@ input[type=text] {
 }
 input[type=text]:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 .guessed input[type=text] { border-color: var(--warn); }
+/* A speaker with no usable photo renders initials; the image field fixes it. */
+.missing input[type=text] { border-color: var(--accent); }
+.missing label { color: var(--accent); }
 .hint { font-size: 11px; color: var(--warn); margin-top: 3px; }
 button {
   background: var(--panel-2); color: var(--ink); border: 1px solid var(--line);

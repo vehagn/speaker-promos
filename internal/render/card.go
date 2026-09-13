@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/vehagn/speaker-promos/internal/cache"
@@ -219,17 +220,51 @@ func Initials(name string) string {
 	return string(out)
 }
 
+// HasPhoto reports whether a speaker's photo can actually be fetched.
+//
+// This is not the same as "Image is set": an URL that 404s, or a local path
+// that does not exist, also lands on a monogram, and callers reporting what a
+// card shows need the fetched answer rather than the configured one.
+//
+// The check asks for the SMALLEST rendition the size clamp allows. Whether a
+// photo exists does not depend on the size requested, and a card's own request
+// size varies with its geometry and speaker count, so there is no single size
+// that would always reuse the card's cache entry — a small one at least keeps
+// the miss cheap.
+func (r *Renderer) HasPhoto(sp cnd.Speaker) bool {
+	_, _, ok := r.fetchPhoto(sp, 0)
+	return ok
+}
+
 // fetchPhoto downloads a speaker photo, returning its bytes and MIME type.
 func (r *Renderer) fetchPhoto(sp cnd.Speaker, size int) ([]byte, string, bool) {
-	if r.Images == nil {
+	src := sp.ImageSource(photoRequestSize(size))
+	if src.Empty() {
 		return nil, "", false
 	}
-	url := sp.ImageURL(photoRequestSize(size))
-	if url == "" {
+
+	var data []byte
+	switch {
+	case src.Path != "":
+		// A photo supplied by an override, sitting next to the manifest. Read
+		// regardless of r.Images: that switch is about not hitting the network,
+		// and a local file is not the network.
+		b, err := os.ReadFile(src.Path)
+		if err != nil {
+			return nil, "", false
+		}
+		data = b
+	case r.Images == nil:
 		return nil, "", false
+	default:
+		b, err := r.Images.Get(src.URL)
+		if err != nil {
+			return nil, "", false
+		}
+		data = b
 	}
-	data, err := r.Images.Get(url)
-	if err != nil || len(data) == 0 {
+
+	if len(data) == 0 {
 		return nil, "", false
 	}
 	mime := http.DetectContentType(data)

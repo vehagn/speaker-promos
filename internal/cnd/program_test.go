@@ -178,18 +178,66 @@ func TestAbstractsAreFlattenedPlainText(t *testing.T) {
 	}
 }
 
-func TestSpeakerImageURL(t *testing.T) {
-	s := Speaker{Image: "https://cdn.sanity.io/images/mvzwvw14/production/abc-740x827.png"}
-	if got, want := s.ImageURL(600), s.Image+"?w=600&h=600&fit=crop&fm=jpg&q=82"; got != want {
-		t.Errorf("ImageURL = %q", got)
+func TestSpeakerImageSource(t *testing.T) {
+	// The CMS CDN is the only host that understands the transform parameters.
+	cms := Speaker{Image: "https://cdn.sanity.io/images/mvzwvw14/production/abc-740x827.png"}
+	got := cms.ImageSource(600)
+	if want := cms.Image + "?w=600&h=600&fit=crop&fm=jpg&q=82"; got.URL != want {
+		t.Errorf("CMS URL = %q, want %q", got.URL, want)
+	}
+	if got.Path != "" {
+		t.Errorf("CMS source should have no Path: %+v", got)
 	}
 	// An URL that already carries a query must gain "&", not a second "?".
 	q := Speaker{Image: "https://cdn.sanity.io/x.png?rect=1,2,3,4"}
-	if got := q.ImageURL(600); !strings.Contains(got, "?rect=1,2,3,4&w=600") {
-		t.Errorf("ImageURL with existing query = %q", got)
+	if g := q.ImageSource(600); !strings.Contains(g.URL, "?rect=1,2,3,4&w=600") {
+		t.Errorf("existing query = %q", g.URL)
 	}
-	if got := (Speaker{}).ImageURL(600); got != "" {
-		t.Errorf("ImageURL without photo = %q, want empty", got)
+
+	// Any other host is fetched verbatim. Appending CMS parameters there was
+	// wrong: a GitHub avatar ignored them, and on an arbitrary host they could
+	// mean something else entirely.
+	for _, raw := range []string{
+		"https://avatars.githubusercontent.com/u/12345?v=4",
+		"https://example.com/photo.jpg",
+	} {
+		g := Speaker{Image: raw}.ImageSource(600)
+		if g.URL != raw {
+			t.Errorf("ImageSource(%q).URL = %q, want it untouched", raw, g.URL)
+		}
+	}
+
+	// A photo supplied by an override may be a path on disk.
+	for in, want := range map[string]string{
+		"/tmp/photo.jpg":        "/tmp/photo.jpg",
+		"photos/dario.png":      "photos/dario.png",
+		"file:///tmp/photo.jpg": "/tmp/photo.jpg",
+	} {
+		g := Speaker{Image: in}.ImageSource(600)
+		if g.Path != want {
+			t.Errorf("ImageSource(%q).Path = %q, want %q", in, g.Path, want)
+		}
+		if g.URL != "" {
+			t.Errorf("ImageSource(%q) should have no URL: %+v", in, g)
+		}
+	}
+
+	if g := (Speaker{}).ImageSource(600); !g.Empty() {
+		t.Errorf("no photo = %+v, want empty", g)
+	}
+}
+
+func TestIsRemoteImage(t *testing.T) {
+	for in, want := range map[string]bool{
+		"https://example.com/a.jpg": true,
+		"http://example.com/a.jpg":  true,
+		"/tmp/a.jpg":                false,
+		"photos/a.jpg":              false,
+		"":                          false,
+	} {
+		if got := IsRemoteImage(in); got != want {
+			t.Errorf("IsRemoteImage(%q) = %v", in, got)
+		}
 	}
 }
 

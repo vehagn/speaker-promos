@@ -39,6 +39,12 @@ const APIVersion = "promo.cloudnativedays.no/v1alpha1"
 const (
 	KindSpeakerOverride = "SpeakerOverride"
 	KindTalkOverride    = "TalkOverride"
+	// KindTalkInfo is informational: `promo export` writes it into a bundle's
+	// promo.yaml to record everything known about the talk. It is accepted when
+	// a manifest is loaded and then ignored, so an exported bundle can be
+	// passed straight back with --manifest without having to be edited down
+	// first.
+	KindTalkInfo = "TalkInfo"
 )
 
 // Metadata names the object an override applies to.
@@ -55,7 +61,14 @@ type Metadata struct {
 type SpeakerSpec struct {
 	Employer string `yaml:"employer,omitempty"`
 	Job      string `yaml:"job,omitempty"`
-	Links    Links  `yaml:"links,omitempty"`
+	// Image replaces the speaker's photo. Five of the 2026 speakers have none
+	// and get a monogram instead, and a CMS photo is sometimes just bad.
+	//
+	// Either an http(s) URL or a path on disk; a relative path resolves against
+	// the manifest's own directory, so a bundle can carry its own photo next to
+	// the promo.yaml that names it.
+	Image string `yaml:"image,omitempty"`
+	Links Links  `yaml:"links,omitempty"`
 }
 
 // Links are a speaker's profiles, overriding anything scraped.
@@ -69,7 +82,7 @@ type Links struct {
 func (l Links) empty() bool { return l == Links{} }
 
 func (s SpeakerSpec) empty() bool {
-	return s.Employer == "" && s.Job == "" && s.Links.empty()
+	return s.Employer == "" && s.Job == "" && s.Image == "" && s.Links.empty()
 }
 
 // TalkSpec overrides how a talk is presented.
@@ -181,7 +194,7 @@ func (s *Set) addDocument(node *yaml.Node) error {
 
 	switch doc.Kind {
 	case KindSpeakerOverride:
-		if err := checkFields(&doc.Spec, "employer", "job", "links"); err != nil {
+		if err := checkFields(&doc.Spec, "employer", "job", "image", "links"); err != nil {
 			return err
 		}
 		var spec SpeakerSpec
@@ -209,9 +222,14 @@ func (s *Set) addDocument(node *yaml.Node) error {
 			return fmt.Errorf("line %d: duplicate %s for %q", node.Line, doc.Kind, doc.Metadata.Name)
 		}
 		s.talks[doc.Metadata.Name] = spec
+	case KindTalkInfo:
+		// Informational, and deliberately not field-checked: it is a record of
+		// what an export contained, so it may grow fields that an older binary
+		// has never heard of. Rejecting those would make bundles from a newer
+		// version unloadable for no benefit.
 	default:
-		return fmt.Errorf("line %d: unknown kind %q (want %s or %s)",
-			node.Line, doc.Kind, KindSpeakerOverride, KindTalkOverride)
+		return fmt.Errorf("line %d: unknown kind %q (want %s, %s or %s)",
+			node.Line, doc.Kind, KindSpeakerOverride, KindTalkOverride, KindTalkInfo)
 	}
 	return nil
 }
@@ -467,13 +485,21 @@ func (s *Set) Rewrite(sess cnd.Session) cnd.Session {
 			continue
 		}
 		title := spec.RoleTitle()
-		if title == "" || title == sp.Title {
+		image := s.resolveImage(spec.Image)
+		changesTitle := title != "" && title != sp.Title
+		changesImage := image != "" && image != sp.Image
+		if !changesTitle && !changesImage {
 			continue
 		}
 		if speakers == nil {
 			speakers = slices.Clone(sess.Talk.Speakers)
 		}
-		speakers[i].Title = title
+		if changesTitle {
+			speakers[i].Title = title
+		}
+		if changesImage {
+			speakers[i].Image = image
+		}
 	}
 	if speakers != nil {
 		sess.Talk.Speakers = speakers
@@ -509,4 +535,21 @@ func (s *Set) Apply(in []cnd.Session) []cnd.Session {
 		out = append(out, s.Rewrite(sess))
 	}
 	return out
+}
+
+// resolveImage turns an override's image value into something a renderer can
+// fetch.
+//
+// A relative path is resolved against the manifest's own directory rather than
+// the process working directory, so a bundle that carries a photo next to its
+// promo.yaml keeps working whatever directory the tool is run from.
+func (s *Set) resolveImage(image string) string {
+	image = strings.TrimSpace(image)
+	if image == "" || cnd.IsRemoteImage(image) || filepath.IsAbs(image) {
+		return image
+	}
+	if dir := filepath.Dir(s.path); dir != "" && dir != "." {
+		return filepath.Join(dir, image)
+	}
+	return image
 }

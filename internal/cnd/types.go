@@ -40,14 +40,46 @@ type Speaker struct {
 	Image string `json:"image,omitempty"`
 }
 
-// ImageURL returns the speaker photo cropped to a square of the given size.
-// It returns "" when the speaker has no photo.
-func (s Speaker) ImageURL(size int) string {
-	if s.Image == "" {
-		return ""
+// sanityHost is the CMS image CDN, the only source that understands the
+// transform parameters below.
+const sanityHost = "cdn.sanity.io"
+
+// IsRemoteImage reports whether an image reference is a URL rather than a path
+// on disk.
+func IsRemoteImage(image string) bool {
+	return strings.HasPrefix(image, "http://") || strings.HasPrefix(image, "https://")
+}
+
+// ImageSource is where a speaker photo comes from: exactly one of URL or Path
+// is set, and both are empty when there is no photo.
+type ImageSource struct {
+	URL  string
+	Path string
+}
+
+// Empty reports whether there is no photo to fetch.
+func (s ImageSource) Empty() bool { return s.URL == "" && s.Path == "" }
+
+// ImageSource resolves a speaker's photo for a square of the given size.
+//
+// Transform parameters are added ONLY for the CMS CDN, which is the only host
+// that understands them. They used to be appended to every URL, which was
+// wrong in both directions: a GitHub avatar or LinkedIn photo silently ignored
+// them and came back at its own size, and an overridden photo on an arbitrary
+// host could be handed query parameters that mean something else there.
+func (s Speaker) ImageSource(size int) ImageSource {
+	image := strings.TrimSpace(s.Image)
+	switch {
+	case image == "":
+		return ImageSource{}
+	case !IsRemoteImage(image):
+		return ImageSource{Path: strings.TrimPrefix(image, "file://")}
+	case !strings.Contains(image, sanityHost):
+		return ImageSource{URL: image}
 	}
+
 	sep := "?"
-	if strings.Contains(s.Image, "?") {
+	if strings.Contains(image, "?") {
 		sep = "&"
 	}
 	// JPEG, not the source PNG: these get base64-embedded into an SVG, and at
@@ -55,7 +87,9 @@ func (s Speaker) ImageURL(size int) string {
 	// difference in the size of every promo. `fm` is set explicitly rather than
 	// via `auto=format` because the fetcher sends `Accept: */*`, which would
 	// leave the choice of codec up to the CDN.
-	return fmt.Sprintf("%s%sw=%d&h=%d&fit=crop&fm=jpg&q=82", s.Image, sep, size, size)
+	return ImageSource{
+		URL: fmt.Sprintf("%s%sw=%d&h=%d&fit=crop&fm=jpg&q=82", image, sep, size, size),
+	}
 }
 
 // Talk is an accepted session.

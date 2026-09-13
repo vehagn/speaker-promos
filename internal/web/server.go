@@ -224,6 +224,7 @@ func (s *Server) handleSpeakerUpdate(w http.ResponseWriter, r *http.Request) {
 	spec := manifest.SpeakerSpec{
 		Employer: strings.TrimSpace(r.FormValue("employer")),
 		Job:      strings.TrimSpace(r.FormValue("job")),
+		Image:    strings.TrimSpace(r.FormValue("image")),
 		Links: manifest.Links{
 			LinkedIn: strings.TrimSpace(r.FormValue("linkedin")),
 			Bluesky:  strings.TrimPrefix(strings.TrimSpace(r.FormValue("bluesky")), "@"),
@@ -402,10 +403,18 @@ func (s *Server) buildViewLocked(sess cnd.Session, size string) talkView {
 	view.Talk, _ = set.Talk(sess.Talk.ID)
 
 	in := post.Input{Conference: s.opts.Program.Conference, Session: rewritten}
-	for _, sp := range sess.Talk.Speakers {
+	for i, sp := range sess.Talk.Speakers {
 		links := overrides.LinksFor(sp, s.speakerLinks(sp))
 		role := overrides.RoleFor(sp)
 		override, _ := set.Speaker(sp.Slug)
+
+		// The photo check runs against the REWRITTEN speaker, since an image
+		// override is applied there and is exactly what this answer is about.
+		// Rewrite preserves order and length, so the indices line up.
+		photoOf := sp
+		if i < len(rewritten.Talk.Speakers) {
+			photoOf = rewritten.Talk.Speakers[i]
+		}
 
 		view.Speakers = append(view.Speakers, speakerView{
 			Speaker:  sp,
@@ -413,6 +422,7 @@ func (s *Server) buildViewLocked(sess cnd.Session, size string) talkView {
 			Links:    links,
 			Override: override,
 			Guessed:  role.Guessed,
+			HasPhoto: s.renderer.HasPhoto(photoOf),
 		})
 		in.Speakers = append(in.Speakers, post.Speaker{Speaker: sp, Role: role, Links: links})
 	}
@@ -447,7 +457,7 @@ func (s *Server) exporter(sizes []string) *export.Exporter {
 	return &export.Exporter{
 		Renderer:     s.renderer,
 		Set:          s.opts.Set,
-		Conference:   s.opts.Program.Conference,
+		Program:      s.opts.Program,
 		Formats:      s.opts.Formats,
 		Sizes:        sizes,
 		RasterWidth:  s.opts.RasterWidth,

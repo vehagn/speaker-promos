@@ -87,7 +87,7 @@ func cmdExport(args []string) error {
 	exporter := &export.Exporter{
 		Renderer:     renderer,
 		Set:          set,
-		Conference:   program.Conference,
+		Program:      program,
 		Formats:      wantFormats,
 		Sizes:        wantSizes,
 		RasterWidth:  *width,
