@@ -6,10 +6,14 @@ from the live conference program, plus draft social copy to go with them.
 Posting stays manual — this tool removes the copy-paste-retype step, not the judgement.
 
 ```sh
+go run ./cmd/promo serve                       # preview and edit everything in a browser
 go run ./cmd/promo list                        # index the program
 go run ./cmd/promo svg --all --out out/        # render every promo card
 go run ./cmd/promo post emeka-okafor         # draft LinkedIn / Bluesky copy
 ```
+
+`serve` is the one to start with: it shows every card next to its draft copy, with the
+fields the tool had to guess editable in place.
 
 The 2025 promos were drawn by hand in Inkscape: 23 near-identical 4.7 MB SVGs, each one a
 manual copy-paste-retype of a photo, name, employer and talk title. 2026 has 36 talks and
@@ -21,8 +25,10 @@ manual copy-paste-retype of a photo, name, employer and talk title. 2026 has 36 
 go build -o promo ./cmd/promo
 ```
 
-Go 1.27 or newer. The only dependencies are `golang.org/x/image` (font metrics) and
-`gopkg.in/yaml.v3` (themes); fonts are vendored under `assets/fonts`.
+Go 1.27 or newer. The only Go dependencies are `golang.org/x/image` (font metrics) and
+`gopkg.in/yaml.v3` (themes and manifests). Fonts are vendored under `assets/fonts` (OFL
+1.1) and HTMX under `internal/web/static` (0BSD), so the tool needs no network at runtime
+beyond the conference website itself.
 
 ## Where the data comes from
 
@@ -169,6 +175,73 @@ Social handles for @-mentions are scraped from `/speaker/<slug>`, which exposes 
 Bluesky, GitHub and X links where a speaker set them. This is the most fragile part of the
 tool and is only used for optional mention suggestions; `--no-links` skips it.
 
+Corrections go in a manifest, described below.
+
+## `promo serve`
+
+```sh
+go run ./cmd/promo serve                    # http://localhost:8787
+go run ./cmd/promo serve --size landscape --addr :9000
+```
+
+Every talk as a row: the real card on the left, and on the right its slot, the editable
+speaker facts, and both drafts with live character counts. The Bluesky count has a meter
+because 300 characters is the binding constraint. Guessed employers are outlined in amber
+with the text they were guessed from.
+
+Editing a field saves it to the manifest immediately and re-renders that one card — there
+is no save button, and nothing to lose if the browser closes. `git diff promos.yaml` is
+the record; `git checkout promos.yaml` is the undo.
+
+- **Display title** shortens a title on the card without touching the program.
+- **hidden** excludes a talk from `--all` and from the Export button.
+- **Export all** writes every visible card to `--out`, the same as `promo svg --all`.
+
+Startup fetches the 49 speaker profile pages once (~3 MB each, then cached on disk); after
+that page loads are instant. `--no-links` skips it entirely. Cards are served as the same
+self-contained SVGs you would post, so the preview is the artifact rather than an
+approximation — which does mean a fully scrolled page pulls ~24 MB from localhost.
+
+## Overrides
+
+`svg`, `post` and `serve` all read `promos.yaml` (`--manifest`), a multi-document
+Kubernetes-style manifest. It is meant to be committed: it is the record of every
+correction made to data the tool guessed.
+
+```yaml
+apiVersion: promo.cloudnativedays.no/v1alpha1
+kind: SpeakerOverride
+metadata:
+  name: gunvor-rønning          # speaker slug, as printed by `promo list`
+spec:
+  employer: Bysten Labs
+  job: Infrastructure Engineer
+  links:
+    linkedin: https://www.linkedin.com/in/dario
+    bluesky: dario.bsky.social
+---
+apiVersion: promo.cloudnativedays.no/v1alpha1
+kind: TalkOverride
+metadata:
+  name: 584db4de-d0ac-4d3a-9fc7-33d541b6c862   # talk id
+spec:
+  displayTitle: Kort tittel
+  hidden: false
+```
+
+An overridden employer stops being reported as a guess, and reaches the card's role line as
+well as the copy — the card saying the wrong thing is usually why you are correcting it.
+
+`apiVersion`, `kind` and every field name are validated with the line number, so a typo is
+an error rather than an override that silently does nothing:
+
+```
+promo: promos.yaml: line 6: unknown field "employeer" (known fields: employer, job, links)
+```
+
+`promo serve` writes this file sorted by kind then name, so it stays diff-stable, and
+removes an object once all of its fields are cleared.
+
 ## Layout
 
 ```
@@ -180,6 +253,8 @@ internal/theme/     theme structs, YAML loading, embedded default-2026
 internal/layout/    font metrics, greedy wrap, size autofit
 internal/render/    SVG emitters (portrait, landscape)
 internal/post/      LinkedIn / Bluesky copy
+internal/manifest/  override manifests (load, validate, save)
+internal/web/       preview server, templates, vendored HTMX
 assets/fonts/       vendored OFL fonts + licences
 ```
 
