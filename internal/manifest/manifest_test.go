@@ -19,7 +19,7 @@ func tempPath(t *testing.T) string {
 const sample = `apiVersion: promo.cloudnativedays.no/v1alpha1
 kind: SpeakerOverride
 metadata:
-  name: gunvor-rønning
+  name: dario-haaland
 spec:
   employer: Bysten Labs
   job: Infrastructure Engineer
@@ -46,7 +46,7 @@ func TestLoadSample(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 
-	sp, ok := set.Speaker("gunvor-rønning")
+	sp, ok := set.Speaker("dario-haaland")
 	if !ok {
 		t.Fatal("speaker override not loaded")
 	}
@@ -61,13 +61,13 @@ func TestLoadSample(t *testing.T) {
 	if !ok {
 		t.Fatal("talk override not loaded")
 	}
-	if tk.DisplayTitle != "Nok nok Nett" || tk.Hidden {
+	if tk.DisplayTitle != "Nok nett" || tk.Hidden {
 		t.Errorf("talk spec = %+v", tk)
 	}
 
 	// The post package is what resolves overrides, so the bridge to it matters
 	// as much as the parse.
-	role := set.Overrides().RoleFor(cnd.Speaker{Slug: "gunvor-rønning", Title: "Bysten Labs"})
+	role := set.Overrides().RoleFor(cnd.Speaker{Slug: "dario-haaland", Title: "Bysten Labs"})
 	if role.Employer != "Bysten Labs" || role.Job != "Infrastructure Engineer" {
 		t.Errorf("RoleFor = %+v", role)
 	}
@@ -292,7 +292,7 @@ func TestRoleTitle(t *testing.T) {
 	}{
 		// The upstream convention, so a corrected role reads like an
 		// uncorrected one.
-		{SpeakerSpec{Job: "Staff Developer Advocate", Employer: "Vestbit Labs"}, "Staff Developer Advocate at Vestbit Labs"},
+		{SpeakerSpec{Job: "Senior Platform Engineer", Employer: "Vestbit"}, "Senior Platform Engineer at Vestbit"},
 		{SpeakerSpec{Employer: "Bysten Labs"}, "Bysten Labs"},
 		{SpeakerSpec{Job: "Utvikler"}, "Utvikler"},
 		// Nothing said about the role: the caller keeps the upstream value.
@@ -309,7 +309,7 @@ func TestRoleTitle(t *testing.T) {
 // correct an employer is that the graphic says the wrong thing.
 func TestRewriteAppliesSpeakerOverrideToCardTitle(t *testing.T) {
 	set := New(tempPath(t))
-	if err := set.SetSpeaker("gunvor-rønning", SpeakerSpec{
+	if err := set.SetSpeaker("dario-haaland", SpeakerSpec{
 		Employer: "Bysten Labs AS",
 		Job:      "Infrastructure Engineer",
 	}); err != nil {
@@ -319,7 +319,7 @@ func TestRewriteAppliesSpeakerOverrideToCardTitle(t *testing.T) {
 	sess := cnd.Session{Talk: cnd.Talk{
 		ID: "talk-1",
 		Speakers: []cnd.Speaker{
-			{Slug: "gunvor-rønning", Name: "Frøya Oliveira", Title: "Bysten Labs"},
+			{Slug: "dario-haaland", Name: "Dario Haaland", Title: "Bysten Labs"},
 			{Slug: "untouched", Name: "Someone Else", Title: "Dev at Acme"},
 		},
 	}}

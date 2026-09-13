@@ -482,8 +482,8 @@ func (s *Set) Rewrite(sess cnd.Session) cnd.Session {
 }
 
 // RoleTitle renders a speaker override as the free-text title a card shows,
-// following the upstream convention ("Staff Developer Advocate at Vestbit
-// Labs"). It returns "" when the override says nothing about the role, so the
+// following the upstream convention ("Senior Platform Engineer at
+// Vestbit"). It returns "" when the override says nothing about the role, so the
 // upstream value is kept.
 func (spec SpeakerSpec) RoleTitle() string {
 	switch {

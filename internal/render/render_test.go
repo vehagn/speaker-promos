@@ -205,7 +205,7 @@ func TestOnlyUsedFacesAreEmbedded(t *testing.T) {
 func TestEmojiIsReportedAndStrippable(t *testing.T) {
 	r := renderer(t)
 	s := testSession()
-	s.Talk.Title = "Hardening Multi-Tenancy: at Fjord Scale"
+	s.Talk.Title = "Kan 🇳🇴 skyen kjøre på en brødrister?"
 
 	res, err := r.Card(testConference(), s, "portrait")
 	if err != nil {
@@ -255,7 +255,7 @@ func TestMissingPhotoFallsBackToMonogram(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(res.SVG, ">VH<") {
+	if !strings.Contains(res.SVG, ">SV<") {
 		t.Error("want the speaker's initials as a monogram")
 	}
 	if strings.Contains(res.SVG, "<image") {
@@ -299,11 +299,11 @@ func TestMissingLogoFallsBackToConferenceName(t *testing.T) {
 
 func TestInitials(t *testing.T) {
 	for in, want := range map[string]string{
-		"Sindre Vik":              "VH",
-		"Frøya Oliveira":          "JI",
-		"Eirik Skogli":                    "L",
+		"Sindre Vik":                "SV",
+		"Dario Haaland":             "DH",
+		"solveig":                   "S",
 		"":                          "",
-		"Halvard Bjørnsen":         "ØK",
+		"Øyvind Riise":              "ØR",
 		"  spaced   name   here   ": "SN",
 	} {
 		if got := Initials(in); got != want {

@@ -31,8 +31,9 @@ type Speaker struct {
 	Name string `json:"name"`
 	Slug string `json:"slug"`
 	// Title is free text from the speaker's profile and is wildly inconsistent
-	// across speakers: "Staff Developer Advocate at Vestbit Labs", "Bysten Labs",
-	// "Utvikler hos Bergsdal", or empty. There is no structured employer field, so
+	// across speakers: "Senior Platform Engineer at Vestbit", "Bysten Labs",
+	// "Utvikler hos Bergsdal Consulting", or empty. There is no structured
+	// employer field, so
 	// anything that needs an employer has to guess — see Employer in post copy.
 	Title string `json:"title"`
 	// Image is a cdn.sanity.io URL. It accepts crop transforms; use ImageURL.

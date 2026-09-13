@@ -130,7 +130,7 @@ func TestWrapHonoursHardNewlines(t *testing.T) {
 
 func TestFitPicksLargestSizeThatFits(t *testing.T) {
 	f := heading(t)
-	short, long := "Talos", "Hardening Platforms: the Boring Way — Lessons from Saltverket"
+	short, long := "Talos", "Simplifying Sovereignty: When the Registry Is Gone — Lessons from Lysaker Works"
 
 	s := Fit(f, short, 46, 82, 0, 1.1, 900, 3)
 	if s.Size != 82 {
@@ -200,7 +200,7 @@ func TestFitSingleSizeDisablesAutofit(t *testing.T) {
 func TestSplitRunsSeparatesEmoji(t *testing.T) {
 	f := heading(t)
 	// The real 2026 title that motivated run splitting.
-	runs := SplitRuns(f, "Hardening Multi-Tenancy: at Fjord Scale")
+	runs := SplitRuns(f, "Kan 🇳🇴 skyen kjøre på en brødrister?")
 
 	if !HasFallback(runs) {
 		t.Fatal("flag emoji was not routed to the fallback family")
@@ -210,7 +210,7 @@ func TestSplitRunsSeparatesEmoji(t *testing.T) {
 	for _, r := range runs {
 		sb.WriteString(r.Text)
 	}
-	if got, want := sb.String(), "Hardening Multi-Tenancy: at Fjord Scale"; got != want {
+	if got, want := sb.String(), "Kan 🇳🇴 skyen kjøre på en brødrister?"; got != want {
 		t.Errorf("runs do not reassemble:\n got %q\nwant %q", got, want)
 	}
 
@@ -332,15 +332,20 @@ func TestFitStyleUsesThemeValues(t *testing.T) {
 // Every talk title in the real program must lay out without overflowing at the
 // theme's configured sizes; this is the check that the type scale is actually
 // viable for the 2026 data rather than just for short examples.
-func TestRealTitlesFitTheDefaultTheme(t *testing.T) {
+func TestProgramTitlesFitTheDefaultTheme(t *testing.T) {
+	// These mirror the anonymised program fixture's title distribution: the
+	// longest one it contains, the emoji title, Norwegian letters, a
+	// typographic apostrophe and an em dash, and a short title that must NOT be
+	// scaled down. Between them they cover every glyph class and both ends of
+	// the length range that autofit has to cope with.
 	titles := []string{
-		"Hardening Multi-Tenancy: at Fjord Scale",
-		"Scaling Scheduling: the Boring Way — Lessons from Fjordstack",
-		"Hardening Platforms: the Boring Way — Lessons from Saltverket",
+		"Kan 🇳🇴 skyen kjøre på en brødrister?",
+		"Automating Runtimes: for Teams That Sleep at Night — Lessons from Grønnfjell Tech",
+		"Simplifying Sovereignty: When the Registry Is Gone — Lessons from Lysaker Works",
 		"Nettverket er ikke dødt — det er bare ikke der du la det",
-		"Measuring Supply Chains: Before It Bites You — Lessons from Kvernhuset IT",
-		"Ti tusen pods senere",
-		"Nei til YAML-fjellet",
+		"Hvorfor ble det så vanskelig",
+		"Plattform uten panikk",
+		"Drift uten dramatikk, for folk flest",
 	}
 	fs, err := loadSet()
 	if err != nil {

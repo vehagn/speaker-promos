@@ -11,7 +11,7 @@ import (
 type Role struct {
 	// Job is the role, e.g. "Staff Developer Advocate". May be empty.
 	Job string
-	// Employer is the company, e.g. "Vestbit Labs". May be empty.
+	// Employer is the company, e.g. "Vestbit". May be empty.
 	Employer string
 	// Guessed is true when Employer was inferred from free text rather than
 	// taken from an override. Copy marks these so they get checked before
@@ -22,22 +22,22 @@ type Role struct {
 // separators split a profile title into role and employer.
 //
 // The upstream `title` field is free text with no structure, and the 2026
-// program shows the full range: "Staff Developer Advocate at Vestbit Labs",
-// "Senior Cloud Dev Advocate @Havbris", "Utvikler hos Bergsdal", "Bysten Labs", and
-// empty. These are the separators that actually occur.
+// program shows the full range: "Senior Platform Engineer at Vestbit",
+// "Senior Consultant @Nordvik", "Utvikler hos Bergsdal Consulting",
+// "Bysten Labs", and empty. These are the separators that actually occur.
 //
 // " i " is deliberately absent. It is the Norwegian "in", and while
-// "faggruppeleder i Tindra" does mean Tindra is the employer, " i " also appears
-// mid-phrase often enough ("Drift i Praksis") that matching it produced worse
-// guesses than leaving the whole string as the employer.
+// "faggruppeleder i Tindra" does mean Tindra is the employer, " i " also
+// appears mid-phrase often enough ("Drift i Praksis") that matching it
+// produced worse guesses than leaving the whole string as the employer.
 var separators = []string{" at ", " hos ", " @ ", " @", "@"}
 
 // ParseRole splits a speaker's profile title into job and employer.
 //
 // The LEFTMOST separator wins rather than the first one in the list: the role
-// comes before the employer, so in "Platform lead hos Tindra at Oslo" the split
-// belongs at " hos ", and preferring " at " because it happens to be listed
-// first would take "Oslo" as the employer.
+// comes before the employer, so in "Platform lead hos Tindra at Oslo" the
+// split belongs at " hos ", and preferring " at " because it happens to be
+// listed first would take "Oslo" as the employer.
 //
 // A title with no separator is treated as a bare employer rather than a bare
 // job: the cases that occur in practice are company names ("Bysten Labs"), and

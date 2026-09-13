@@ -9,7 +9,7 @@ Posting stays manual — this tool removes the copy-paste-retype step, not the j
 go run ./cmd/promo serve                       # preview and edit everything in a browser
 go run ./cmd/promo list                        # index the program
 go run ./cmd/promo svg --all --out out/        # render every promo card
-go run ./cmd/promo post emeka-okafor         # draft LinkedIn / Bluesky copy
+go run ./cmd/promo post dario-haaland          # draft LinkedIn / Bluesky copy
 ```
 
 `serve` is the one to start with: it shows every card next to its draft copy, with the
@@ -53,12 +53,12 @@ Every command that takes a talk accepts a `<selector>`, resolved most-specific f
 | Tier | Example |
 |---|---|
 | Talk id prefix | `584db4de` |
-| Speaker slug | `emeka-okafor`, `ylva-sorgard` |
-| Talk title substring | `"pods on mars"`, `Nok-nok-nett` |
+| Speaker slug | `dario-haaland`, `audun-oygard` |
+| Talk title substring | `"nok nett"`, `nok-nett` |
 | Speaker name substring | `"haaland"` |
 
 The first tier that matches anything wins, so a precise identifier is never ambiguous.
-Norwegian letters are folded, so `ylva-sorgard` finds `ylva-sørgard`. Use
+Norwegian letters are folded, so `audun-oygard` finds `audun-øygard`. Use
 `--all` to select the whole program.
 
 ## `promo list`
@@ -69,8 +69,8 @@ Cloud Native Days Norway 2026 — 26–27 October 2026, Bergen, Norway
 36 talks, 49 speakers
 
 DAY  TIME         TRACK               SPEAKERS                      TALK                                          SELECTOR
-1    09:00–11:00  Full Day Workshops  Frøya Oliveira              Kan 🇳🇴 skyen kjøre på en brødrister?…  gunvor-rønning
-1    09:00–11:00  Morning Workshops   Gudrun Nyhus and Vemund Lindved    Scaling Scheduling: the Boring Way — Lessons from Fjordstack…  astrid-sæther
+1    09:00–11:00  Full Day Workshops  Dario Haaland                 Kan 🇳🇴 skyen kjøre på en brødrister?      dario-haaland
+1    09:00–11:00  Morning Workshops   Espen Tveitan and Leif Grim…  Scaling Scheduling: the Boring Way — Lesson…  espen-tveitan
 …
 ```
 
@@ -80,9 +80,9 @@ abstracts included.
 ## `promo svg`
 
 ```sh
-go run ./cmd/promo svg emeka-okafor                     # one card, portrait
+go run ./cmd/promo svg dario-haaland                      # one card, portrait
 go run ./cmd/promo svg --all --size both --out out/       # 72 cards
-go run ./cmd/promo svg gunvor-rønning --png             # rasterise too
+go run ./cmd/promo svg dario-haaland --png                # rasterise too
 ```
 
 Two sizes: **portrait** 1400×2100 (as 2025) and **landscape** 1200×630 (the site's OG
@@ -112,7 +112,7 @@ installed it writes the SVGs anyway and tells you what to install.
 
 ### Emoji
 
-Talk titles contain them — *"Hardening Multi-Tenancy: at Fjord Scale"*. Space
+Talk titles contain them — *"Kan 🇳🇴 skyen kjøre på en brødrister?"*. Space
 Grotesk has no emoji coverage, so runs whose glyphs are missing from the embedded font are
 split into their own `<tspan>` with a system fallback family (`Apple Color Emoji`,
 `Noto Color Emoji`) and measured at a 1 em approximation. Their advance is therefore
@@ -138,24 +138,24 @@ is truncated and the card is named in a warning rather than silently clipped.
 ## `promo post`
 
 ```sh
-go run ./cmd/promo post emeka-okafor
+go run ./cmd/promo post dario-haaland
 go run ./cmd/promo post --platform bluesky --all
 ```
 
 ```
-── bluesky (256/300 chars) ──
+── bluesky (259/300 chars) ──
 
-Lucia Ferreira (Havbris) is speaking at Cloud Native Days Norway 2026 🎤
+Dario Haaland (Bysten Labs) is running a workshop at Cloud Native Days Norway 2026 🎤
 
-“Nettverket er ikke dødt — det er bare ikke der du la det”
+“Kan 🇳🇴 skyen kjøre på en brødrister?”
 
-09:10–09:50 · Tuesday 27 October
+Plattformer bygges best når teamet forstår hele stacken.
 
-@audun.bsky.social
+09:00–11:00 · Monday 26 October
 https://2026.cloudnativedays.no/program
 
 check before posting:
-  - employer for Lucia Ferreira guessed as "Havbris" from "Senior Cloud Dev Advocate @Havbris" — check it
+  - employer for Dario Haaland guessed as "Bysten Labs" from "Bysten Labs" — check it
 ```
 
 Bluesky copy is assembled to fit 300 characters with the handles and link reserved first,
@@ -177,8 +177,8 @@ under *profiles to mention* for LinkedIn.
 ### Employers are guessed
 
 There is no structured employer field. `speaker.title` is free text and inconsistent:
-`"Staff Developer Advocate at Vestbit Labs"`, `"Senior Cloud Dev Advocate @Havbris"`,
-`"Utvikler hos Bergsdal"`, `"Bysten Labs"`, `""`. `post` splits on the separators that actually
+`"Senior Platform Engineer at Vestbit"`, `"Senior Consultant @Nordvik"`,
+`"Utvikler hos Bergsdal Consulting"`, `"Bysten Labs"`, `""`. `post` splits on the separators that actually
 occur and treats a title with no separator as a bare employer — then **marks every guess
 for checking**, as above.
 
@@ -223,7 +223,7 @@ correction made to data the tool guessed.
 apiVersion: promo.cloudnativedays.no/v1alpha1
 kind: SpeakerOverride
 metadata:
-  name: gunvor-rønning          # speaker slug, as printed by `promo list`
+  name: dario-haaland             # speaker slug, as printed by `promo list`
 spec:
   employer: Bysten Labs
   job: Infrastructure Engineer

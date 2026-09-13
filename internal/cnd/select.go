@@ -14,7 +14,7 @@ import (
 // Selectors are resolved most-specific first so that a precise identifier is
 // never ambiguous: talk id prefix, then speaker slug, then a case-insensitive
 // substring of the talk title, then of a speaker name. The first tier that
-// matches anything wins, which is why `promo svg sindre-vik` and
+// matches anything wins, which is why `promo svg dario-haaland` and
 // `promo svg "pods on mars"` both do the obvious thing.
 func (p Program) Find(selector string) []Session {
 	q := strings.ToLower(strings.TrimSpace(selector))
@@ -33,7 +33,7 @@ func (p Program) Find(selector string) []Session {
 			return false
 		},
 		// Speaker slugs keep their Norwegian letters upstream
-		// ("ylva-sørgard"), and `list` prints them verbatim, so the
+		// ("audun-øygard"), and `list` prints them verbatim, so the
 		// ASCII form a user can actually type has to match too.
 		func(s Session) bool {
 			for _, sp := range s.Talk.Speakers {

@@ -25,7 +25,7 @@ Usage:
   promo theme dump                   print the built-in theme as YAML
 
 A <selector> picks talks by id prefix, speaker slug, or a substring of the
-talk title, e.g. "gunvor-rønning" or "Nok nok nett". Use --all to
+talk title, e.g. "dario-haaland" or "nok nett". Use --all to
 select every talk.
 
 Run "promo <command> -h" for the flags of a command.
@@ -176,7 +176,7 @@ func truncate(s string, n int) string {
 // parseFlags parses args allowing flags to appear after positional arguments.
 //
 // Go's flag package stops parsing at the first non-flag argument, so
-// `promo svg gunvor-rønning --out promos/` would silently treat "--out" and
+// `promo svg dario-haaland --out promos/` would silently treat "--out" and
 // "promos/" as selectors. That word order is the natural one and every other
 // modern CLI accepts it, so the arguments are permuted first: flags (with their
 // values) are hoisted ahead of the positionals.

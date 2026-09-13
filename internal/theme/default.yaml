@@ -70,7 +70,7 @@ geometry:
         minSize: 46
         maxSize: 92
         # Three lines because a four-speaker talk joins into a long string
-        # ("Astrid Sæther, Espen Kvalheim, Ines Duarte and Halvard Bjørnsen").
+        # ("Bendik Lunde, Solveig Ulriksen, Dagny Bianchi and Kwame Nyhus").
         maxLines: 3
         lineHeight: 1.05
         color: text

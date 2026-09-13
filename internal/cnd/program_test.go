@@ -12,10 +12,18 @@ import (
 )
 
 // The fixture is the real program page with everything but its RSC payload
-// stripped, gzipped to keep the repository small. Testing against the genuine
+// stripped, then anonymised and gzipped. Testing against a genuinely-shaped
 // payload is the point: the parser's contract is with a page this tool does not
 // control, so a hand-written fixture would only prove the parser agrees with
 // itself.
+//
+// Anonymisation replaced people only, structurally — every speaker name, slug,
+// employer, photo URL, talk title, abstract and id is fabricated, while the row
+// types, $ref graph, nesting and element markers are the real page's. The
+// substitutions preserve the characteristics the tests below rely on: 36 talks
+// over 2 days, 49 speakers, one emoji title, slugs carrying "ø", a speaker with
+// no slug at all, five with no job title, and a description assembled through a
+// $ref. The conference itself is not anonymised — it is what the tool is for.
 var loadFixture = sync.OnceValues(func() (*Program, error) {
 	f, err := os.Open("testdata/program.html.gz")
 	if err != nil {
@@ -161,7 +169,7 @@ func TestAbstractsAreFlattenedPlainText(t *testing.T) {
 
 	// The Norwegian workshop's abstract is assembled from a $ref mid-paragraph;
 	// resolving it is what makes the full sentence appear.
-	s, err := p.FindOne("Nok nok Nett")
+	s, err := p.FindOne("Nok nett")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,11 +197,11 @@ func TestFindSelectorTiers(t *testing.T) {
 	p := fixture(t)
 
 	// Speaker slug.
-	got, err := p.FindOne("gunvor-rønning")
+	got, err := p.FindOne("dario-haaland")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(got.Talk.Title, "Nok nok Nett") {
+	if !strings.Contains(got.Talk.Title, "Nok nett") {
 		t.Errorf("slug selector found %q", got.Talk.Title)
 	}
 
@@ -207,12 +215,12 @@ func TestFindSelectorTiers(t *testing.T) {
 	}
 
 	// Title substring, case-insensitively.
-	if _, err := p.FindOne("Nok nok nett"); err != nil {
+	if _, err := p.FindOne("nok nett"); err != nil {
 		t.Errorf("title substring: %v", err)
 	}
 
 	// Slug-form title, so Norwegian letters can be typed as ASCII.
-	if _, err := p.FindOne("Nok-nok-nett"); err != nil {
+	if _, err := p.FindOne("nok-nett"); err != nil {
 		t.Errorf("slug-form title: %v", err)
 	}
 
@@ -328,11 +336,11 @@ func TestSlugifyNorwegian(t *testing.T) {
 func TestFindMatchesTransliteratedSpeakerSlug(t *testing.T) {
 	p := fixture(t)
 
-	exact, err := p.FindOne("ylva-sørgard")
+	exact, err := p.FindOne("audun-øygard")
 	if err != nil {
 		t.Fatal(err)
 	}
-	ascii, err := p.FindOne("ylva-sorgard")
+	ascii, err := p.FindOne("audun-oygard")
 	if err != nil {
 		t.Fatalf("ASCII form of a Norwegian slug did not match: %v", err)
 	}
@@ -346,7 +354,7 @@ func TestConferenceURLs(t *testing.T) {
 	if got := c.ProgramURL(); got != "https://2026.cloudnativedays.no/program" {
 		t.Errorf("ProgramURL = %q", got)
 	}
-	if got := c.SpeakerURL(Speaker{Slug: "gunvor-rønning"}); got != "https://2026.cloudnativedays.no/speaker/gunvor-rønning" {
+	if got := c.SpeakerURL(Speaker{Slug: "dario-haaland"}); got != "https://2026.cloudnativedays.no/speaker/dario-haaland" {
 		t.Errorf("SpeakerURL = %q", got)
 	}
 	// Without a domain there is nothing valid to emit, so callers get "" and

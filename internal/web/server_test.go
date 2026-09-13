@@ -37,10 +37,10 @@ func testProgram() *cnd.Program {
 				Date: "2026-10-26", Day: 1, Track: "Track 1: Full Day Workshops",
 				StartTime: "09:00", EndTime: "11:00",
 				Talk: cnd.Talk{
-					ID: talkID, Title: "Nok nok Nett", Format: "workshop_120", Level: "intermediate",
+					ID: talkID, Title: "Nok nett", Format: "workshop_120", Level: "intermediate",
 					Abstract: "Et foredrag om åpen kildekode og norsk suverenitet.",
 					Speakers: []cnd.Speaker{{
-						ID: "sp-1", Name: "Frøya Oliveira", Slug: "gunvor-rønning", Title: "Bysten Labs",
+						ID: "sp-1", Name: "Dario Haaland", Slug: "dario-haaland", Title: "Bysten Labs",
 					}},
 				},
 			},
@@ -109,7 +109,7 @@ func TestIndexListsEveryTalk(t *testing.T) {
 		t.Errorf("rendered %d rows, want 2", n)
 	}
 	for _, want := range []string{
-		"Nok nok Nett", "Pods on Mars", "Frøya Oliveira",
+		"Nok nett", "Pods on Mars", "Dario Haaland",
 		"Cloud Native Days Norway 2026", "26–27 October 2026",
 		`src="/card/` + talkID, "htmx.min.js",
 		// The website's "Track N: " prefix is noise once the row is labelled.
@@ -184,7 +184,7 @@ func TestSpeakerEditPersistsAndRerenders(t *testing.T) {
 		t.Fatal("expected the upstream title on the card first")
 	}
 
-	rec := postForm(t, h, "/speaker/gunvor-rønning", url.Values{
+	rec := postForm(t, h, "/speaker/dario-haaland", url.Values{
 		"talk":     {talkID},
 		"employer": {"Bysten Labs AS"},
 		"job":      {"Infrastructure Engineer"},
@@ -199,7 +199,7 @@ func TestSpeakerEditPersistsAndRerenders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"kind: SpeakerOverride", "name: gunvor-rønning",
+	for _, want := range []string{"kind: SpeakerOverride", "name: dario-haaland",
 		"employer: Bysten Labs AS", "job: Infrastructure Engineer", "bluesky: dario.example"} {
 		if !strings.Contains(string(saved), want) {
 			t.Errorf("manifest missing %q:\n%s", want, saved)
@@ -236,7 +236,7 @@ func TestCardURLRevisionChangesAfterAnEdit(t *testing.T) {
 	_, h, _ := newTestServer(t)
 	first := extractCardURL(t, get(t, h, "/talk/"+talkID).Body.String())
 
-	postForm(t, h, "/speaker/gunvor-rønning", url.Values{
+	postForm(t, h, "/speaker/dario-haaland", url.Values{
 		"talk": {talkID}, "employer": {"New Corp"},
 	})
 	second := extractCardURL(t, get(t, h, "/talk/"+talkID).Body.String())
@@ -323,7 +323,7 @@ func TestDownloadUsesTheCLIFilename(t *testing.T) {
 	cd := rec.Header().Get("Content-Disposition")
 	// Same stem as `promo svg` writes, so a browser download and a CLI export
 	// land on the same name.
-	if !strings.Contains(cd, "d1-0900-gunvor-rønning") || !strings.Contains(cd, ".svg") {
+	if !strings.Contains(cd, "d1-0900-dario-haaland") || !strings.Contains(cd, ".svg") {
 		t.Errorf("Content-Disposition = %q", cd)
 	}
 }
@@ -374,7 +374,7 @@ func TestConcurrentEditsAreSerialised(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			postForm(t, h, "/speaker/gunvor-rønning", url.Values{
+			postForm(t, h, "/speaker/dario-haaland", url.Values{
 				"talk": {talkID}, "employer": {"Corp"},
 			})
 			postForm(t, h, "/talk/talk-2", url.Values{"displayTitle": {"T"}})
@@ -389,7 +389,7 @@ func TestConcurrentEditsAreSerialised(t *testing.T) {
 	if err != nil {
 		t.Fatalf("manifest is corrupt after concurrent edits: %v", err)
 	}
-	if sp, ok := set.Speaker("gunvor-rønning"); !ok || sp.Employer != "Corp" {
+	if sp, ok := set.Speaker("dario-haaland"); !ok || sp.Employer != "Corp" {
 		t.Errorf("speaker override = %+v, ok=%v", sp, ok)
 	}
 }

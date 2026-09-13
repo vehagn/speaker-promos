@@ -15,9 +15,9 @@ func TestParseRole(t *testing.T) {
 		job      string
 		employer string
 	}{
-		{"Staff Developer Advocate at Vestbit Labs", "Staff Developer Advocate", "Vestbit Labs"},
-		{"Senior Cloud Dev Advocate @Havbris", "Senior Cloud Dev Advocate", "Havbris"},
-		{"Utvikler hos Bergsdal", "Utvikler", "Bergsdal"},
+		{"Senior Platform Engineer at Vestbit", "Senior Platform Engineer", "Vestbit"},
+		{"Senior Consultant @Nordvik", "Senior Consultant", "Nordvik"},
+		{"Utvikler hos Skyvakt", "Utvikler", "Skyvakt"},
 		{"Developer Advocate at Fjordstack", "Developer Advocate", "Fjordstack"},
 		{"Engineering Manager at Tindra Systems", "Engineering Manager", "Tindra Systems"},
 		// No separator: the whole string is taken as the employer, because the
@@ -55,8 +55,8 @@ func TestParseRoleLeavesNorwegianIAlone(t *testing.T) {
 }
 
 func TestOverridesWin(t *testing.T) {
-	sp := cnd.Speaker{Slug: "gunvor-rønning", Name: "Frøya Oliveira", Title: "Bysten Labs"}
-	o := Overrides{"gunvor-rønning": {
+	sp := cnd.Speaker{Slug: "dario-haaland", Name: "Dario Haaland", Title: "Bysten Labs"}
+	o := Overrides{"dario-haaland": {
 		Employer: "Bysten Labs AS",
 		Job:      "Infrastructure Engineer",
 		LinkedIn: "https://www.linkedin.com/in/dario",
