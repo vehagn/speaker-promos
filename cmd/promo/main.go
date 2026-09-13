@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/vehagn/speaker-promos/internal/cnd"
+	"github.com/vehagn/speaker-promos/internal/manifest"
 )
 
 const usage = `promo — speaker promo graphics for Cloud Native Days
@@ -83,13 +84,37 @@ func (c *commonFlags) load() (*cnd.Program, error) {
 	return loader.Load()
 }
 
-// selectSessions resolves positional selectors, or every session with --all.
-func selectSessions(p *cnd.Program, all bool, selectors []string) ([]cnd.Session, error) {
+// manifestFlag registers the override-manifest path for a command that honours
+// overrides, and loads it.
+type manifestFlag struct{ path string }
+
+func (m *manifestFlag) register(fs *flag.FlagSet) {
+	// No backticks in the usage text: the flag package reads those as the
+	// value-name placeholder and would print "-manifest promo serve".
+	fs.StringVar(&m.path, "manifest", manifest.DefaultPath,
+		"override manifest of employer and title corrections")
+}
+
+func (m *manifestFlag) load() (*manifest.Set, error) {
+	return manifest.Load(m.path)
+}
+
+// selectSessions resolves positional selectors, or every session with --all,
+// and applies the manifest's talk-level overrides to whatever it returns.
+//
+// A hidden talk is dropped from --all but kept when named explicitly: asking
+// for a talk by name and being told no talk matches would be a worse surprise
+// than rendering one that was meant to be skipped in bulk.
+func selectSessions(p *cnd.Program, set *manifest.Set, all bool, selectors []string) ([]cnd.Session, error) {
 	if all {
 		if len(selectors) > 0 {
 			return nil, errors.New("--all takes no selectors")
 		}
-		return p.Sessions, nil
+		out := set.Apply(p.Sessions)
+		if skipped := len(p.Sessions) - len(out); skipped > 0 {
+			fmt.Fprintf(os.Stderr, "note: skipping %d talk(s) marked hidden in %s\n", skipped, set.Path())
+		}
+		return out, nil
 	}
 	if len(selectors) == 0 {
 		return nil, errors.New("give at least one selector, or --all")
@@ -105,7 +130,7 @@ func selectSessions(p *cnd.Program, all bool, selectors []string) ([]cnd.Session
 		for _, h := range hits {
 			if !seen[h.Talk.ID] {
 				seen[h.Talk.ID] = true
-				out = append(out, h)
+				out = append(out, set.Rewrite(h))
 			}
 		}
 	}

@@ -7,7 +7,6 @@ import (
 
 	"github.com/vehagn/speaker-promos/internal/cnd"
 	"github.com/vehagn/speaker-promos/internal/post"
-	"gopkg.in/yaml.v3"
 )
 
 func cmdPost(args []string) error {
@@ -16,21 +15,24 @@ func cmdPost(args []string) error {
 	common.register(fs)
 	all := fs.Bool("all", false, "draft copy for every talk")
 	platform := fs.String("platform", "both", "linkedin, bluesky, or both")
-	speakersFile := fs.String("speakers", "speakers.yaml", "overrides for guessed employers and handles")
+	var manifestPath manifestFlag
+	manifestPath.register(fs)
 	noLinks := fs.Bool("no-links", false, "skip fetching speaker pages for social handles")
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 
+	set, err := manifestPath.load()
+	if err != nil {
+		return err
+	}
+	overrides := set.Overrides()
+
 	program, err := common.load()
 	if err != nil {
 		return err
 	}
-	sessions, err := selectSessions(program, *all, fs.Args())
-	if err != nil {
-		return err
-	}
-	overrides, err := loadOverrides(*speakersFile)
+	sessions, err := selectSessions(program, set, *all, fs.Args())
 	if err != nil {
 		return err
 	}
@@ -102,21 +104,4 @@ func printDraft(d post.Draft) {
 			fmt.Println("  - " + n)
 		}
 	}
-}
-
-// loadOverrides reads the speaker correction file. A missing file is not an
-// error: the flag has a default path and most runs will not have one.
-func loadOverrides(path string) (post.Overrides, error) {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return post.Overrides{}, nil
-		}
-		return nil, fmt.Errorf("reading %s: %w", path, err)
-	}
-	var o post.Overrides
-	if err := yaml.Unmarshal(b, &o); err != nil {
-		return nil, fmt.Errorf("parsing %s: %w", path, err)
-	}
-	return o, nil
 }

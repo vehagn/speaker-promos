@@ -5,8 +5,9 @@
 # Generated promos
 /out/
 
-# Local overrides
-/speakers.yaml
+# Local theme overrides. The promo manifest (promos.yaml) is deliberately NOT
+# ignored: it is the record of every correction made to the guessed data, and
+# reviewing it in a diff is the point.
 /theme.yaml
 
 # Editors

@@ -284,3 +284,91 @@ func TestApplyRewritesAndFilters(t *testing.T) {
 		t.Error("Hidden disagrees with the specs")
 	}
 }
+
+func TestRoleTitle(t *testing.T) {
+	for _, tc := range []struct {
+		spec SpeakerSpec
+		want string
+	}{
+		// The upstream convention, so a corrected role reads like an
+		// uncorrected one.
+		{SpeakerSpec{Job: "Staff Developer Advocate", Employer: "Vestbit Labs"}, "Staff Developer Advocate at Vestbit Labs"},
+		{SpeakerSpec{Employer: "Bysten Labs"}, "Bysten Labs"},
+		{SpeakerSpec{Job: "Utvikler"}, "Utvikler"},
+		// Nothing said about the role: the caller keeps the upstream value.
+		{SpeakerSpec{}, ""},
+		{SpeakerSpec{Links: Links{Bluesky: "a.example"}}, ""},
+	} {
+		if got := tc.spec.RoleTitle(); got != tc.want {
+			t.Errorf("RoleTitle(%+v) = %q, want %q", tc.spec, got, tc.want)
+		}
+	}
+}
+
+// A speaker override has to reach the CARD, not just the copy: the reason to
+// correct an employer is that the graphic says the wrong thing.
+func TestRewriteAppliesSpeakerOverrideToCardTitle(t *testing.T) {
+	set := New(tempPath(t))
+	if err := set.SetSpeaker("gunvor-rønning", SpeakerSpec{
+		Employer: "Bysten Labs AS",
+		Job:      "Infrastructure Engineer",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	sess := cnd.Session{Talk: cnd.Talk{
+		ID: "talk-1",
+		Speakers: []cnd.Speaker{
+			{Slug: "gunvor-rønning", Name: "Frøya Oliveira", Title: "Bysten Labs"},
+			{Slug: "untouched", Name: "Someone Else", Title: "Dev at Acme"},
+		},
+	}}
+
+	got := set.Rewrite(sess)
+	if want := "Infrastructure Engineer at Bysten Labs AS"; got.Talk.Speakers[0].Title != want {
+		t.Errorf("speaker 0 title = %q, want %q", got.Talk.Speakers[0].Title, want)
+	}
+	// A speaker with no override keeps the upstream value.
+	if got.Talk.Speakers[1].Title != "Dev at Acme" {
+		t.Errorf("speaker 1 title = %q, want it untouched", got.Talk.Speakers[1].Title)
+	}
+}
+
+// Regression: cnd.Session is a value but its Speakers slice shares a backing
+// array with the Program, so a speaker on two talks has one array. Writing a
+// rewritten title in place leaked one session's override into every other
+// session that speaker appeared in.
+func TestRewriteDoesNotMutateTheSharedSpeakerSlice(t *testing.T) {
+	set := New(tempPath(t))
+	if err := set.SetSpeaker("shared", SpeakerSpec{Employer: "Corrected"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Both sessions share one backing array, as they do when they come from a
+	// single Program.
+	speakers := []cnd.Speaker{{Slug: "shared", Name: "Shared Speaker", Title: "Original"}}
+	first := cnd.Session{Talk: cnd.Talk{ID: "talk-1", Speakers: speakers}}
+	second := cnd.Session{Talk: cnd.Talk{ID: "talk-2", Speakers: speakers}}
+
+	rewritten := set.Rewrite(first)
+	if rewritten.Talk.Speakers[0].Title != "Corrected" {
+		t.Fatalf("rewrite did not apply: %q", rewritten.Talk.Speakers[0].Title)
+	}
+	if speakers[0].Title != "Original" {
+		t.Errorf("the shared backing array was mutated: %q", speakers[0].Title)
+	}
+	if second.Talk.Speakers[0].Title != "Original" {
+		t.Errorf("the override leaked into another session: %q", second.Talk.Speakers[0].Title)
+	}
+}
+
+func TestRewriteWithoutOverridesReturnsInputUnchanged(t *testing.T) {
+	set := New(tempPath(t))
+	speakers := []cnd.Speaker{{Slug: "nobody", Title: "Original"}}
+	sess := cnd.Session{Talk: cnd.Talk{ID: "talk-1", Title: "Kept", Speakers: speakers}}
+
+	got := set.Rewrite(sess)
+	if got.Talk.Title != "Kept" || got.Talk.Speakers[0].Title != "Original" {
+		t.Errorf("unchanged session was altered: %+v", got.Talk)
+	}
+}

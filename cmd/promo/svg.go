@@ -16,6 +16,8 @@ func cmdSVG(args []string) error {
 	fs := newFlagSet("svg")
 	var common commonFlags
 	common.register(fs)
+	var manifestPath manifestFlag
+	manifestPath.register(fs)
 	all := fs.Bool("all", false, "render every talk in the program")
 	out := fs.String("out", "out", "directory to write into")
 	sizes := fs.String("size", "portrait", "card sizes to render: portrait, landscape, or both")
@@ -37,11 +39,15 @@ func cmdSVG(args []string) error {
 		return err
 	}
 
+	overrides, err := manifestPath.load()
+	if err != nil {
+		return err
+	}
 	program, err := common.load()
 	if err != nil {
 		return err
 	}
-	sessions, err := selectSessions(program, *all, fs.Args())
+	sessions, err := selectSessions(program, overrides, *all, fs.Args())
 	if err != nil {
 		return err
 	}

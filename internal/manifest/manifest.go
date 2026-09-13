@@ -19,6 +19,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -440,20 +441,59 @@ func (s *Set) Hidden(talkID string) bool {
 	return ok && spec.Hidden
 }
 
-// Rewrite applies a talk's overrides to a session.
+// Rewrite applies a session's overrides — both the talk's and its speakers'.
 //
-// Talk-level overrides are applied by rewriting the session before it reaches
-// the renderer or the copy, which leaves both of those packages untouched and
-// unaware that overrides exist.
+// Overrides are applied by rewriting the session before it reaches the renderer
+// or the copy, which leaves both of those packages untouched and unaware that
+// overrides exist.
+//
+// Speaker overrides are folded into cnd.Speaker.Title, which is what a card's
+// role line renders. Without this, correcting an employer would change the
+// social copy but not the graphic sitting next to it — and the whole reason to
+// correct it is that the card says the wrong thing.
 func (s *Set) Rewrite(sess cnd.Session) cnd.Session {
-	spec, ok := s.Talk(sess.Talk.ID)
-	if !ok {
-		return sess
-	}
-	if spec.DisplayTitle != "" {
+	if spec, ok := s.Talk(sess.Talk.ID); ok && spec.DisplayTitle != "" {
 		sess.Talk.Title = spec.DisplayTitle
 	}
+
+	// The speaker slice is shared with the Program — a speaker appearing on two
+	// talks has one backing array — so it must be cloned before any element is
+	// touched. Writing in place would leak this session's overrides into every
+	// other session that speaker appears in.
+	var speakers []cnd.Speaker
+	for i, sp := range sess.Talk.Speakers {
+		spec, ok := s.Speaker(sp.Slug)
+		if !ok {
+			continue
+		}
+		title := spec.RoleTitle()
+		if title == "" || title == sp.Title {
+			continue
+		}
+		if speakers == nil {
+			speakers = slices.Clone(sess.Talk.Speakers)
+		}
+		speakers[i].Title = title
+	}
+	if speakers != nil {
+		sess.Talk.Speakers = speakers
+	}
 	return sess
+}
+
+// RoleTitle renders a speaker override as the free-text title a card shows,
+// following the upstream convention ("Staff Developer Advocate at Vestbit
+// Labs"). It returns "" when the override says nothing about the role, so the
+// upstream value is kept.
+func (spec SpeakerSpec) RoleTitle() string {
+	switch {
+	case spec.Job != "" && spec.Employer != "":
+		return spec.Job + " at " + spec.Employer
+	case spec.Job != "":
+		return spec.Job
+	default:
+		return spec.Employer
+	}
 }
 
 // Apply rewrites every session and drops the hidden ones. It is what bulk
