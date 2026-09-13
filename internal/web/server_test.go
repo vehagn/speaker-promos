@@ -1,7 +1,10 @@
 package web
 
 import (
+	"bytes"
 	"encoding/xml"
+	"image"
+	"image/png"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,8 +14,12 @@ import (
 	"sync"
 	"testing"
 
+	"time"
+
+	"github.com/vehagn/speaker-promos/internal/cache"
 	"github.com/vehagn/speaker-promos/internal/cnd"
 	"github.com/vehagn/speaker-promos/internal/manifest"
+	"github.com/vehagn/speaker-promos/internal/render"
 	"github.com/vehagn/speaker-promos/internal/theme"
 )
 
@@ -520,4 +527,104 @@ func svgText(t *testing.T, doc string) string {
 		}
 	}
 	return strings.Join(parts, " ")
+}
+
+// Regression: the speaker form's trigger was "change from:find input", and
+// `find` selects the FIRST matching descendant — the hidden talk input. Hidden
+// inputs never fire change, so every speaker field silently did nothing in the
+// browser. Verified in a real browser: a bare "change" on the form posts,
+// because change events bubble; the "from:find input" spelling never fires.
+//
+// The handler tests around this one all POST directly and so could not catch
+// it, which is exactly why this asserts on the markup.
+func TestSpeakerFormTriggerFiresInABrowser(t *testing.T) {
+	_, h, _ := newTestServer(t)
+	body := get(t, h, "/talk/"+talkID).Body.String()
+
+	i := strings.Index(body, `hx-post="/speaker/`)
+	if i < 0 {
+		t.Fatal("no speaker form in the fragment")
+	}
+	form := body[i:]
+	if end := strings.Index(form, ">"); end > 0 {
+		form = form[:end]
+	}
+	if !strings.Contains(form, `hx-trigger="change"`) {
+		t.Errorf("speaker form trigger is not a bare form-level change: %s", form)
+	}
+
+	// No `from:` modifier anywhere: a trigger sourced from one element cannot
+	// see changes to the others, and every field in these forms must post.
+	if strings.Contains(body, "from:find") || strings.Contains(body, "from:") {
+		t.Error("a from: trigger modifier is back; it cannot see sibling inputs")
+	}
+
+	// Every editable speaker field has to be inside that form, or it is not
+	// included in the post.
+	for _, field := range []string{"name", "employer", "job", "title", "image",
+		"linkedin", "bluesky", "x"} {
+		if !strings.Contains(body, `name="`+field+`"`) {
+			t.Errorf("speaker form is missing the %q field", field)
+		}
+	}
+}
+
+// A photo on an arbitrary host must be fetched exactly as given: no CMS
+// transform parameters bolted on, which is what broke GitHub avatars and
+// LinkedIn photos before ImageSource existed.
+func TestArbitraryPhotoHostIsFetchedVerbatim(t *testing.T) {
+	const photo = "https://media.licdn.com/dms/image/v2/ABC/profile-displayphoto-crop_800_800/X/0/1777263639281?e=1790812800&v=beta&t=sig"
+
+	var asked []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked = append(asked, r.URL.String())
+		w.Header().Set("Content-Type", "image/png")
+		w.Write(tinyPNG(t))
+	}))
+	defer srv.Close()
+
+	// The same shape as a LinkedIn URL — query string and signature included —
+	// pointed at a server that records what it was asked for.
+	url := srv.URL + "/dms/image/v2/ABC/photo?e=1790812800&v=beta&t=sig"
+	sp := cnd.Speaker{Slug: "s", Name: "A Speaker", Image: url}
+	if got := sp.ImageSource(600); got.URL != url {
+		t.Fatalf("ImageSource = %q, want the URL untouched", got.URL)
+	}
+
+	th, _ := theme.Default()
+	r, err := render.New(th, cache.New(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.HasPhoto(sp) {
+		t.Error("a photo on an arbitrary host was not fetched")
+	}
+	if len(asked) == 0 {
+		t.Fatal("the host was never asked")
+	}
+	for _, a := range asked {
+		for _, bolted := range []string{"fit=crop", "fm=jpg", "w=600"} {
+			if strings.Contains(a, bolted) {
+				t.Errorf("request %q carries a CMS transform parameter %q", a, bolted)
+			}
+		}
+	}
+	// And the real URL shape parses the same way.
+	if got := (cnd.Speaker{Image: photo}).ImageSource(600); got.URL != photo {
+		t.Errorf("LinkedIn URL = %q, want it untouched", got.URL)
+	}
+}
+
+// tinyPNG is a 2x2 opaque PNG.
+func tinyPNG(t *testing.T) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	for i := range img.Pix {
+		img.Pix[i] = 0x80
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
 }

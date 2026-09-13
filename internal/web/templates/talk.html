@@ -56,9 +56,15 @@
     <fieldset class="{{if .Guessed}}guessed{{end}}">
       <legend>{{.DisplayName}}</legend>
       {{/* Every input posts on change, so there is no save button and nothing
-           to lose. The manifest is written on each one. */}}
+           to lose. The manifest is written on each one.
+
+           The trigger is a bare "change" on the FORM, which works because
+           change events bubble. It used to be "change from:find input", and
+           that was dead: `find` selects the first matching descendant, which
+           is the hidden talk input below, and hidden inputs never fire change.
+           Every speaker field silently did nothing in the browser. */}}
       <form hx-post="/speaker/{{.Speaker.Slug}}" hx-target="#{{$.Anchor}}" hx-swap="outerHTML"
-            hx-trigger="change from:find input" hx-include="closest form">
+            hx-trigger="change" hx-include="closest form">
         <input type="hidden" name="talk" value="{{$.Session.Talk.ID}}">
         <input type="hidden" name="size" value="{{$.Size}}">
         <div class="grid">
