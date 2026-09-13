@@ -176,6 +176,7 @@ is truncated and the card is named in a warning rather than silently clipped.
 ```sh
 go run ./cmd/promo post dario-haaland
 go run ./cmd/promo post --platform bluesky --all
+go run ./cmd/promo post --all --language no          # force Norwegian
 ```
 
 ```
@@ -198,6 +199,43 @@ Bluesky copy is assembled to fit 300 characters with the handles and link reserv
 so shortening never eats the link. LinkedIn copy is longer and lists profile URLs
 separately, because LinkedIn only turns a mention into a link when it is picked from its
 own autocomplete.
+
+### Norwegian and English
+
+The program is bilingual, and an English sentence introducing a Norwegian abstract reads
+badly. The copy is written in the talk's own language:
+
+```
+Dario Haaland (Bysten Labs) holder workshop på Cloud Native Days Norway 2026 🎤
+
+«Kan 🇳🇴 skyen kjøre på en brødrister?»
+
+Plattformer bygges best når teamet forstår hele stacken.
+
+09:00–11:00 · mandag 26. oktober
+```
+
+Language is detected per talk by counting function words that occur in one language and
+not the other — not by looking for æ, ø and å, which are a strong signal when present but
+missing from plenty of Norwegian text. The abstract dominates the title by being longer,
+which is what you want for a bilingual title like *"Friheten i Koden: Digital Sovereignty
+for the Nordic Age"*: the copy follows the language the body is actually written in. Across
+the 2026 program this reads 8 talks as Norwegian and 28 as English.
+
+Detection is only a default. `--language en|no` forces one for a run, and `language:` on a
+`TalkOverride` forces one for a single talk, which wins over the flag. `promo serve` has a
+per-talk selector whose *auto* option names what detection picked, and each draft carries a
+badge showing the language it came out in.
+
+What changes is the wording the tool writes: the verb phrase, the conjunction, the
+quotation marks (`«»` rather than `“”`), and the weekday and month names, which are looked
+up rather than taken from `time.Format` — that only knows English. The "check before
+posting" notes stay in English; they are for you, not for the post.
+
+**The cards stay in English.** Their text is conference chrome — the date line, the slot,
+the format — and it is identical on every card, so mixing languages across a set of images
+would look like a mistake rather than a choice. A post is different because it quotes the
+abstract.
 
 ### The link goes to the program
 
@@ -241,6 +279,7 @@ is no save button, and nothing to lose if the browser closes. `git diff promos.y
 the record; `git checkout promos.yaml` is the undo.
 
 - **Photo** gives a speaker a picture when they have none, or replaces a poor one.
+- **Copy language** overrides the detected language; *auto* names what it detected.
 - **Display title** shortens a title on the card without touching the program.
 - **hidden** excludes a talk from `--all` and from the Export button.
 - **Export all** writes a bundle per visible talk to `--out`, through the same code as
@@ -277,6 +316,7 @@ metadata:
 spec:
   displayTitle: Kort tittel
   hidden: false
+  language: no                                 # en or no; omit to auto-detect
 ```
 
 An overridden employer stops being reported as a guess, and reaches the card's role line as

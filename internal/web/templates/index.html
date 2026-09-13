@@ -51,7 +51,15 @@ input[type=text] {
   width: 100%; padding: 7px 9px; border-radius: 7px; border: 1px solid var(--line);
   background: var(--panel-2); color: var(--ink); font-size: 14px;
 }
-input[type=text]:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+input[type=text]:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+select {
+  width: 100%; padding: 7px 9px; border-radius: 7px; border: 1px solid var(--line);
+  background: var(--panel-2); color: var(--ink); font-size: 14px;
+}
+.draft .lang {
+  border: 1px solid var(--line); border-radius: 999px; padding: 1px 7px;
+  font-size: 11px; letter-spacing: .04em;
+}
 .guessed input[type=text] { border-color: var(--warn); }
 /* A speaker with no usable photo renders initials; the image field fixes it. */
 .missing input[type=text] { border-color: var(--accent); }

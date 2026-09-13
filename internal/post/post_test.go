@@ -284,14 +284,14 @@ func TestMentionsListsProfiles(t *testing.T) {
 }
 
 func TestQuoteTitle(t *testing.T) {
-	if got := quoteTitle("Pods on Mars"); got != "“Pods on Mars”" {
+	if got := quoteTitle("Pods on Mars", English); got != "“Pods on Mars”" {
 		t.Errorf("quoteTitle = %q", got)
 	}
 	// A title that already quotes itself is not double-quoted.
-	if got := quoteTitle("“Already quoted”"); got != "“Already quoted”" {
+	if got := quoteTitle("“Already quoted”", English); got != "“Already quoted”" {
 		t.Errorf("quoteTitle = %q", got)
 	}
-	if got := quoteTitle(""); got != "" {
+	if got := quoteTitle("", English); got != "" {
 		t.Errorf("quoteTitle empty = %q", got)
 	}
 }
@@ -319,7 +319,7 @@ func TestJoinAnd(t *testing.T) {
 		{[]string{"A", "B"}, "A and B"},
 		{[]string{"A", "B", "C"}, "A, B and C"},
 	} {
-		if got := joinAnd(tc.in); got != tc.want {
+		if got := joinAnd(tc.in, "and"); got != tc.want {
 			t.Errorf("joinAnd(%v) = %q", tc.in, got)
 		}
 	}

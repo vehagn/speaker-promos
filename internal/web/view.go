@@ -31,6 +31,12 @@ type talkView struct {
 	// Warnings are the render-side notes for this card: truncated text, or
 	// emoji that some renderers will drop.
 	Warnings []string
+	// Language is the language the drafts below were actually written in, after
+	// any override and detection, so a wrong guess is visible.
+	Language post.Language
+	// Detected is what detection picks on its own, so the "auto" option can say
+	// what it means for this talk.
+	Detected post.Language
 }
 
 // speakerView is one speaker's resolved facts plus the form's current values.

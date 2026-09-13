@@ -48,6 +48,8 @@ type Options struct {
 	// RasterWidth and JPEGQuality mirror the export flags; zero means default.
 	RasterWidth int
 	JPEGQuality int
+	// Language is the default copy language; post.Auto detects it per talk.
+	Language post.Language
 }
 
 // Server renders the preview site.
@@ -193,6 +195,11 @@ func (s *Server) handleTalkUpdate(w http.ResponseWriter, r *http.Request) {
 	spec := manifest.TalkSpec{
 		DisplayTitle: strings.TrimSpace(r.FormValue("displayTitle")),
 		Hidden:       r.FormValue("hidden") != "",
+		Language:     strings.TrimSpace(r.FormValue("language")),
+	}
+	if _, err := post.ParseLanguage(spec.Language); err != nil {
+		s.fail(w, err)
+		return
 	}
 
 	s.mu.Lock()
@@ -402,7 +409,11 @@ func (s *Server) buildViewLocked(sess cnd.Session, size string) talkView {
 	}
 	view.Talk, _ = set.Talk(sess.Talk.ID)
 
-	in := post.Input{Conference: s.opts.Program.Conference, Session: rewritten}
+	lang := set.LanguageFor(sess.Talk.ID)
+	if lang == post.Auto {
+		lang = s.opts.Language
+	}
+	in := post.Input{Conference: s.opts.Program.Conference, Session: rewritten, Language: lang}
 	for i, sp := range sess.Talk.Speakers {
 		links := overrides.LinksFor(sp, s.speakerLinks(sp))
 		role := overrides.RoleFor(sp)
@@ -426,6 +437,9 @@ func (s *Server) buildViewLocked(sess cnd.Session, size string) talkView {
 		})
 		in.Speakers = append(in.Speakers, post.Speaker{Speaker: sp, Role: role, Links: links})
 	}
+
+	view.Language = in.Language.Resolve(rewritten.Talk.Title, rewritten.Talk.Abstract)
+	view.Detected = post.Detect(rewritten.Talk.Title, rewritten.Talk.Abstract)
 
 	view.Drafts = []draftView{
 		{Draft: post.LinkedIn(in)},
@@ -458,6 +472,7 @@ func (s *Server) exporter(sizes []string) *export.Exporter {
 		Renderer:     s.renderer,
 		Set:          s.opts.Set,
 		Program:      s.opts.Program,
+		Language:     s.opts.Language,
 		Formats:      s.opts.Formats,
 		Sizes:        sizes,
 		RasterWidth:  s.opts.RasterWidth,

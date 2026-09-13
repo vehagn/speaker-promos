@@ -18,6 +18,7 @@ func cmdPost(args []string) error {
 	var manifestPath manifestFlag
 	manifestPath.register(fs)
 	noLinks := fs.Bool("no-links", false, "skip fetching speaker pages for social handles")
+	language := fs.String("language", "auto", "copy language: auto, en or no")
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
@@ -27,6 +28,10 @@ func cmdPost(args []string) error {
 		return err
 	}
 	overrides := set.Overrides()
+	lang, err := post.ParseLanguage(*language)
+	if err != nil {
+		return err
+	}
 
 	program, err := common.load()
 	if err != nil {
@@ -44,7 +49,13 @@ func cmdPost(args []string) error {
 		if i > 0 {
 			fmt.Println(strings.Repeat("─", 72))
 		}
-		in := post.Input{Conference: program.Conference, Session: s}
+		// A per-talk override wins over the flag, which in turn wins over
+		// detection.
+		talkLang := set.LanguageFor(s.Talk.ID)
+		if talkLang == post.Auto {
+			talkLang = lang
+		}
+		in := post.Input{Conference: program.Conference, Session: s, Language: talkLang}
 		for _, sp := range s.Talk.Speakers {
 			var links cnd.Links
 			if !*noLinks {

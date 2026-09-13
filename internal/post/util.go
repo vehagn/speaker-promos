@@ -5,14 +5,15 @@ import (
 	"time"
 )
 
-func joinAnd(items []string) string {
+// joinAnd joins names as prose, using the given conjunction.
+func joinAnd(items []string, and string) string {
 	switch len(items) {
 	case 0:
 		return ""
 	case 1:
 		return items[0]
 	default:
-		return strings.Join(items[:len(items)-1], ", ") + " and " + items[len(items)-1]
+		return strings.Join(items[:len(items)-1], ", ") + " " + and + " " + items[len(items)-1]
 	}
 }
 

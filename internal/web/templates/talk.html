@@ -30,6 +30,16 @@
                    hx-swap="outerHTML" hx-trigger="change" hx-include="closest form">
           </div>
           <div>
+            <label for="lang-{{.Anchor}}">Copy language</label>
+            <select id="lang-{{.Anchor}}" name="language"
+                    hx-post="/talk/{{.Session.Talk.ID}}" hx-target="#{{.Anchor}}"
+                    hx-swap="outerHTML" hx-include="closest form">
+              <option value="" {{if eq .Talk.Language ""}}selected{{end}}>auto — {{.Detected}}</option>
+              <option value="en" {{if eq .Talk.Language "en"}}selected{{end}}>English</option>
+              <option value="no" {{if eq .Talk.Language "no"}}selected{{end}}>Norsk</option>
+            </select>
+          </div>
+          <div>
             <label>Exclude from bulk renders</label>
             <span class="check">
               <input type="checkbox" name="hidden" value="1" {{if .Hidden}}checked{{end}}
@@ -91,6 +101,7 @@
     <div class="draft">
       <header>
         <span>{{.Draft.Platform}}</span>
+        <span class="lang">{{$.Language}}</span>
         <span class="count {{if .Over}}over{{end}}">{{.Count}}</span>
         {{if .Limit}}<span class="meter"><i class="{{if .Over}}over{{end}}" style="width:{{.Percent}}%"></i></span>{{end}}
         <button type="button" data-copy="copy-{{$.Anchor}}-{{.Draft.Platform}}">Copy</button>

@@ -9,6 +9,7 @@ import (
 	"github.com/vehagn/speaker-promos/internal/cache"
 	"github.com/vehagn/speaker-promos/internal/cnd"
 	"github.com/vehagn/speaker-promos/internal/export"
+	"github.com/vehagn/speaker-promos/internal/post"
 	"github.com/vehagn/speaker-promos/internal/raster"
 	"github.com/vehagn/speaker-promos/internal/render"
 	"github.com/vehagn/speaker-promos/internal/theme"
@@ -30,6 +31,7 @@ func cmdExport(args []string) error {
 	stripEmoji := fs.Bool("strip-emoji", false, "remove emoji rather than relying on a system emoji font")
 	width := fs.Int("width", 0, "raster width in pixels (default: the card's own width)")
 	quality := fs.Int("jpeg-quality", 88, "JPEG quality, 1-100")
+	language := fs.String("language", "auto", "copy language: auto, en or no")
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
@@ -43,6 +45,10 @@ func cmdExport(args []string) error {
 		return err
 	}
 	wantFormats, err := export.ParseFormats(*formats)
+	if err != nil {
+		return err
+	}
+	lang, err := post.ParseLanguage(*language)
 	if err != nil {
 		return err
 	}
@@ -88,6 +94,7 @@ func cmdExport(args []string) error {
 		Renderer:     renderer,
 		Set:          set,
 		Program:      program,
+		Language:     lang,
 		Formats:      wantFormats,
 		Sizes:        wantSizes,
 		RasterWidth:  *width,

@@ -71,6 +71,10 @@ type Exporter struct {
 	// bundle's record can show the original title beside an overridden one.
 	Program *cnd.Program
 
+	// Language is the copy language, or post.Auto to detect it per talk. A
+	// per-talk override in the manifest wins over either.
+	Language post.Language
+
 	// Formats and Sizes select what each bundle contains.
 	Formats []string
 	Sizes   []string
@@ -198,7 +202,11 @@ func (e *Exporter) Write(root string, sess cnd.Session) (Result, error) {
 // postInput resolves the speakers once, so the copy and the record cannot
 // disagree about who works where.
 func (e *Exporter) postInput(sess cnd.Session) post.Input {
-	in := post.Input{Conference: e.conference(), Session: sess}
+	lang := e.Set.LanguageFor(sess.Talk.ID)
+	if lang == post.Auto {
+		lang = e.Language
+	}
+	in := post.Input{Conference: e.conference(), Session: sess, Language: lang}
 	overrides := e.Set.Overrides()
 	for _, sp := range sess.Talk.Speakers {
 		var links cnd.Links

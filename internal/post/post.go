@@ -35,6 +35,14 @@ type Input struct {
 	Conference cnd.Conference
 	Session    cnd.Session
 	Speakers   []Speaker
+	// Language selects the wording. The zero value is Auto, so an Input built
+	// without thinking about language still gets the talk's own.
+	Language Language
+}
+
+// lang resolves the language actually used for this input.
+func (in Input) lang() Language {
+	return in.Language.Resolve(in.Session.Talk.Title, in.Session.Talk.Abstract)
 }
 
 // LinkedIn drafts a LinkedIn post.
@@ -52,13 +60,13 @@ func LinkedIn(in Input) Draft {
 	var b strings.Builder
 	b.WriteString(hook(in))
 	b.WriteString("\n\n")
-	fmt.Fprintf(&b, "%s\n", quoteTitle(s.Talk.Title))
+	fmt.Fprintf(&b, "%s\n", quoteTitle(s.Talk.Title, in.lang()))
 
 	if teaser := cnd.FirstSentences(s.Talk.Abstract, 320); teaser != "" {
 		fmt.Fprintf(&b, "\n%s\n", teaser)
 	}
 
-	fmt.Fprintf(&b, "\n📅 %s · %s\n", s.TimeRange(), dayLabel(in.Conference, s))
+	fmt.Fprintf(&b, "\n📅 %s · %s\n", s.TimeRange(), dayLabel(in.Conference, s, in.lang()))
 	if track := shortTrack(s.Track); track != "" {
 		fmt.Fprintf(&b, "📍 %s\n", track)
 	}
@@ -91,7 +99,7 @@ func Bluesky(in Input) Draft {
 	// The post is built as head + optional middle + tail. The tail holds the
 	// mentions and the link, which are the parts that must never be cut, so
 	// they are reserved up front rather than trimmed off the end.
-	head := hook(in) + "\n\n" + quoteTitle(s.Talk.Title)
+	head := hook(in) + "\n\n" + quoteTitle(s.Talk.Title, in.lang())
 	tail := ""
 	if mentions != "" {
 		tail += "\n\n" + mentions
@@ -100,7 +108,7 @@ func Bluesky(in Input) Draft {
 		tail += "\n" + url
 	}
 
-	slot := fmt.Sprintf("\n\n%s · %s", s.TimeRange(), dayLabel(in.Conference, s))
+	slot := fmt.Sprintf("\n\n%s · %s", s.TimeRange(), dayLabel(in.Conference, s, in.lang()))
 	fits := func(parts ...string) bool {
 		return len([]rune(strings.Join(parts, ""))) <= BlueskyLimit
 	}
@@ -146,6 +154,8 @@ func Bluesky(in Input) Draft {
 
 // hook is the opening sentence, naming the speakers and their employers.
 func hook(in Input) string {
+	w := in.lang().words()
+
 	names := make([]string, 0, len(in.Speakers))
 	for _, sp := range in.Speakers {
 		name := sp.Name
@@ -154,40 +164,49 @@ func hook(in Input) string {
 		}
 		names = append(names, name)
 	}
-	who := joinAnd(names)
+	who := joinAnd(names, w.and)
 	if who == "" {
-		who = "One of our speakers"
+		who = w.anonymous
 	}
 
-	verb := "is speaking"
-	if len(in.Speakers) > 1 {
-		verb = "are speaking"
+	plural := len(in.Speakers) > 1
+	verb := w.speakingSingular
+	if plural {
+		verb = w.speakingPlural
 	}
 	if strings.HasPrefix(in.Session.Talk.Format, "workshop") {
-		verb = "is running a workshop"
-		if len(in.Speakers) > 1 {
-			verb = "are running a workshop"
+		verb = w.workshopSingular
+		if plural {
+			verb = w.workshopPlural
 		}
 	}
-	return fmt.Sprintf("%s %s at %s 🎤", who, verb, in.Conference.Title)
+	return fmt.Sprintf("%s %s %s %s 🎤", who, verb, w.at, in.Conference.Title)
 }
 
 // quoteTitle wraps a talk title in quotation marks, unless it already carries
-// its own.
-func quoteTitle(title string) string {
+// its own. Norwegian uses angle quotation marks.
+func quoteTitle(title string, lang Language) string {
 	if title == "" {
 		return ""
 	}
-	if strings.HasPrefix(title, "“") || strings.HasPrefix(title, "\"") {
-		return title
+	for _, already := range []string{"“", "«", "\""} {
+		if strings.HasPrefix(title, already) {
+			return title
+		}
 	}
-	return "“" + title + "”"
+	w := lang.words()
+	return w.quoteOpen + title + w.quoteClose
 }
 
-// dayLabel names the conference day, e.g. "Monday 26 October".
-func dayLabel(conf cnd.Conference, s cnd.Session) string {
+// dayLabel names the conference day, e.g. "Monday 26 October" or
+// "mandag 26. oktober".
+//
+// The names are looked up rather than taken from time.Format, which only knows
+// English.
+func dayLabel(conf cnd.Conference, s cnd.Session, lang Language) string {
 	if d := parseDate(s.Date); d != nil {
-		return d.Format("Monday 2 January")
+		w := lang.words()
+		return w.date(w, *d)
 	}
 	return conf.DateRange()
 }

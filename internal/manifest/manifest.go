@@ -87,6 +87,9 @@ func (s SpeakerSpec) empty() bool {
 
 // TalkSpec overrides how a talk is presented.
 type TalkSpec struct {
+	// Language forces the draft copy's language when detection gets it wrong,
+	// which a bilingual title will: "en" or "no", empty to auto-detect.
+	Language string `yaml:"language,omitempty"`
 	// DisplayTitle replaces the title on the card and in the copy, for titles
 	// too long to read at card size.
 	DisplayTitle string `yaml:"displayTitle,omitempty"`
@@ -95,7 +98,9 @@ type TalkSpec struct {
 	Hidden bool `yaml:"hidden,omitempty"`
 }
 
-func (t TalkSpec) empty() bool { return t.DisplayTitle == "" && !t.Hidden }
+func (t TalkSpec) empty() bool {
+	return t.DisplayTitle == "" && !t.Hidden && t.Language == ""
+}
 
 // Set is a loaded manifest.
 //
@@ -211,11 +216,16 @@ func (s *Set) addDocument(node *yaml.Node) error {
 		}
 		s.speakers[doc.Metadata.Name] = spec
 	case KindTalkOverride:
-		if err := checkFields(&doc.Spec, "displayTitle", "hidden"); err != nil {
+		if err := checkFields(&doc.Spec, "displayTitle", "hidden", "language"); err != nil {
 			return err
 		}
 		var spec TalkSpec
 		if err := doc.Spec.Decode(&spec); err != nil {
+			return fmt.Errorf("line %d: %s/%s: %w", doc.Spec.Line, doc.Kind, doc.Metadata.Name, err)
+		}
+		// Validated on load so a typo is an error here rather than silently
+		// falling back to English in every generated post.
+		if _, err := post.ParseLanguage(spec.Language); err != nil {
 			return fmt.Errorf("line %d: %s/%s: %w", doc.Spec.Line, doc.Kind, doc.Metadata.Name, err)
 		}
 		if _, dup := s.talks[doc.Metadata.Name]; dup {
@@ -552,4 +562,20 @@ func (s *Set) resolveImage(image string) string {
 		return filepath.Join(dir, image)
 	}
 	return image
+}
+
+// LanguageFor returns the copy language for a talk: the override when one is
+// set, otherwise post.Auto so the caller's own default or detection applies.
+func (s *Set) LanguageFor(talkID string) post.Language {
+	spec, ok := s.Talk(talkID)
+	if !ok || spec.Language == "" {
+		return post.Auto
+	}
+	// Already validated at load; a bad value here can only come from a
+	// programmatic Set and resolves to Auto rather than failing a render.
+	lang, err := post.ParseLanguage(spec.Language)
+	if err != nil {
+		return post.Auto
+	}
+	return lang
 }
