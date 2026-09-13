@@ -23,7 +23,15 @@
         <input type="hidden" name="size" value="{{.Size}}">
         <div class="grid">
           <div>
-            <label for="title-{{.Anchor}}">Display title (blank = as submitted)</label>
+            <label for="title-{{.Anchor}}">Display title
+              {{/* Fixes the capitalisation in place. Title case in English,
+                   sentence case in Norwegian — a wrong result is visible at
+                   once and corrected by typing. */}}
+              <button type="button" class="wand" title="Fix capitalisation"
+                      hx-post="/talk/{{.Session.Talk.ID}}/titlecase"
+                      hx-target="#{{.Anchor}}" hx-swap="outerHTML"
+                      hx-include="closest form">🪄</button>
+            </label>
             <input type="text" id="title-{{.Anchor}}" name="displayTitle"
                    value="{{.Session.Talk.Title}}" placeholder="as submitted"
                    hx-post="/talk/{{.Session.Talk.ID}}" hx-target="#{{.Anchor}}"
@@ -69,7 +77,12 @@
         <input type="hidden" name="size" value="{{$.Size}}">
         <div class="grid">
           <div>
-            <label>Name</label>
+            <label>Name
+              <button type="button" class="wand" title="Capitalise the name"
+                      hx-post="/speaker/{{.Speaker.Slug}}/namecase"
+                      hx-target="#{{$.Anchor}}" hx-swap="outerHTML"
+                      hx-include="closest form">🪄</button>
+            </label>
             <input type="text" name="name" value="{{.Effective.Name}}"
                    placeholder="unknown">
           </div>

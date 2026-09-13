@@ -1102,3 +1102,130 @@ func TestServedCardUsesTheTalksLanguage(t *testing.T) {
 		t.Errorf("served card = %q, want the forced English conjunction", card)
 	}
 }
+
+// The wand buttons rewrite the field's current value and then go through the
+// ordinary update path, so they diff, save and re-render exactly as typing
+// would.
+func TestWandButtonsArePresent(t *testing.T) {
+	_, h, _ := newTestServer(t)
+	body := get(t, h, "/talk/"+talkID).Body.String()
+
+	for _, want := range []string{
+		`hx-post="/talk/` + talkID + `/titlecase"`,
+		`hx-post="/speaker/dario-haaland/namecase"`,
+		// They send the form, so they act on what is on screen rather than on
+		// what was last saved.
+		`hx-include="closest form"`,
+		`class="wand"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("form missing %q", want)
+		}
+	}
+}
+
+func TestNameWandCapitalises(t *testing.T) {
+	dir := t.TempDir()
+	th, err := theme.Default()
+	if err != nil {
+		t.Fatal(err)
+	}
+	program := testProgram()
+	program.Sessions[0].Talk.Speakers[0].Name = "leffen"
+
+	srv, err := New(Options{
+		Program: program, Set: manifest.New(filepath.Join(dir, "promos.yaml")),
+		Theme: th, Size: "portrait", OutDir: filepath.Join(dir, "out"), NoLinks: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := srv.Handler()
+
+	rec := postForm(t, h, "/speaker/dario-haaland/namecase", url.Values{
+		"talk": {talkID}, "name": {"leffen"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d\n%s", rec.Code, rec.Body)
+	}
+	if !strings.Contains(rec.Body.String(), `name="name" value="Leffen"`) {
+		t.Errorf("the field was not capitalised:\n%s", rec.Body)
+	}
+	saved, _ := os.ReadFile(filepath.Join(dir, "promos.yaml"))
+	if !strings.Contains(string(saved), "name: Leffen") {
+		t.Errorf("manifest = %s", saved)
+	}
+	// The card shows it too.
+	if card := svgText(t, get(t, h, "/card/"+talkID).Body.String()); !strings.Contains(card, "Leffen") {
+		t.Errorf("card = %q", card)
+	}
+}
+
+// The title wand picks its convention from the talk's LANGUAGE, resolved
+// against the abstract: a title is a few words and detection needs prose.
+func TestTitleWandFollowsTheTalksLanguage(t *testing.T) {
+	newServer := func(t *testing.T, title, abstract string) (http.Handler, string) {
+		t.Helper()
+		dir := t.TempDir()
+		th, err := theme.Default()
+		if err != nil {
+			t.Fatal(err)
+		}
+		program := testProgram()
+		program.Sessions[0].Talk.Title = title
+		program.Sessions[0].Talk.Abstract = abstract
+		srv, err := New(Options{
+			Program: program, Set: manifest.New(filepath.Join(dir, "promos.yaml")),
+			Theme: th, Size: "portrait", OutDir: filepath.Join(dir, "out"), NoLinks: true,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return srv.Handler(), filepath.Join(dir, "promos.yaml")
+	}
+
+	// Norwegian: sentence case, and a known acronym inside a compound is
+	// restored. The title alone carries no Norwegian function words, so this
+	// only works because the abstract is consulted.
+	h, path := newServer(t, "Agentic Cloud Ops",
+		"Er du klar for å gi slipp på kontrollen og la agenter drifte clusteret ditt?")
+	rec := postForm(t, h, "/talk/"+talkID+"/titlecase", url.Values{
+		"displayTitle": {"agentic cloud ops: praktisk ai-drevet drift"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d\n%s", rec.Code, rec.Body)
+	}
+	saved, _ := os.ReadFile(path)
+	if !strings.Contains(string(saved), "Agentic cloud ops: Praktisk AI-drevet drift") {
+		t.Errorf("Norwegian title not sentence-cased:\n%s", saved)
+	}
+
+	// English: title case, minor words lowercase in the middle.
+	h, path = newServer(t, "Shift Left",
+		"This talk walks through what broke and why the obvious fix made it worse.")
+	rec = postForm(t, h, "/talk/"+talkID+"/titlecase", url.Values{
+		"displayTitle": {"shift left with reliability testing"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	saved, _ = os.ReadFile(path)
+	if !strings.Contains(string(saved), "Shift Left with Reliability Testing") {
+		t.Errorf("English title not title-cased:\n%s", saved)
+	}
+}
+
+// A wand press that changes nothing must store nothing, like any other
+// unchanged submission.
+func TestWandOnAlreadyCorrectValuesStoresNothing(t *testing.T) {
+	_, h, manifestPath := newTestServer(t)
+
+	if rec := postForm(t, h, "/speaker/dario-haaland/namecase", url.Values{
+		"talk": {talkID}, "name": {"Dario Haaland"},
+	}); rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if body, err := os.ReadFile(manifestPath); err == nil && strings.Contains(string(body), "dario-haaland") {
+		t.Errorf("an already-correct name was stored:\n%s", body)
+	}
+}

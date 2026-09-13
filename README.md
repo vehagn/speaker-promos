@@ -289,6 +289,7 @@ is no save button, and nothing to lose if the browser closes. `git diff promos.y
 the record; `git checkout promos.yaml` is the undo.
 
 - **Name** and **Role line** correct what the CMS has, per speaker.
+- The 🪄 beside **Display title** and **Name** fixes capitalisation — see below.
 - **Photo** gives a speaker a picture when they have none, or replaces a poor one.
 - **Copy language** overrides the detected language; *auto* names what it detected.
 - **Display title** shortens a title on the card without touching the program.
@@ -406,6 +407,39 @@ Open source Architect, Co-Chair CNCF TAG Infrastructure"* is one from the 2026 p
 `employer:` still drives what the **post** says, so a `title:` on its own changes the card
 and leaves the copy guessing; set both when the guess is also wrong.
 
+### Fixing capitalisation
+
+A 🪄 sits on the **Display title** and **Name** labels. It rewrites that field and saves, so
+it behaves exactly like typing the value yourself — including storing nothing when the value
+was already right.
+
+Titles follow the talk's language, because the conventions differ:
+
+| | |
+|---|---|
+| English | Title Case, with minor words lowercase in the middle — *"Shift Left with Reliability Testing"* |
+| Norwegian | Sentence case, which is the Norwegian convention — *"Akkurat nok nett: Et datasenter på en laptop"* |
+
+Title-casing a Norwegian title would be an error rather than a correction, and a third of
+the program is Norwegian. The language is resolved against the talk's **abstract**, not the
+title being fixed: a title is a few words, and *"Praktisk AI-drevet Kubernetes-drift"* reads
+as English on its own.
+
+Two rules keep it from making things worse:
+
+- **A word whose spelling someone chose is never touched.** Anything with a capital past its
+  first letter (`OpenTelemetry`, `eBPF`, `iOS`) or containing a digit (`k6`, `k8s`, `EC2`).
+- **A short list of acronyms is expanded**, including inside hyphenated compounds, so `ai`
+  becomes `AI` and `ai-drevet` becomes `AI-drevet` rather than `Ai-drevet`. Without it the
+  button would introduce errors of its own.
+
+Names get the first letter of each part capitalised — for the speakers who typed their own
+name in lower case — while `van`, `de`, `von` and friends stay lowercase mid-name, and
+`McDonald` survives.
+
+It is deliberately crude. Both buttons sit next to the field they change, so a wrong result
+is visible at once and fixed by typing.
+
 ### Photos
 
 Five of the 2026 speakers have no photo and render a monogram of their initials instead,
@@ -444,6 +478,7 @@ internal/theme/     theme structs, YAML loading, embedded default-2026
 internal/layout/    font metrics, greedy wrap, size autofit
 internal/render/    SVG emitters (portrait, landscape)
 internal/lang/      language detection and per-language wording
+internal/textcase/  title-case and name capitalisation for the 🪄 buttons
 internal/post/      LinkedIn / Bluesky copy
 internal/raster/    SVG → PNG via an external tool, PNG → JPEG via stdlib
 internal/export/    per-talk bundles, shared by the CLI and the server

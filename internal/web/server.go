@@ -136,6 +136,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /talk/{id}", s.handleTalkFragment)
 	mux.HandleFunc("POST /talk/{id}", s.handleTalkUpdate)
 	mux.HandleFunc("POST /speaker/{slug}", s.handleSpeakerUpdate)
+	mux.HandleFunc("POST /talk/{id}/titlecase", s.handleTalkTitleCase)
+	mux.HandleFunc("POST /speaker/{slug}/namecase", s.handleSpeakerNameCase)
 	mux.HandleFunc("GET /download/{id}", s.handleDownload)
 	mux.HandleFunc("POST /export", s.handleExport)
 	mux.HandleFunc("POST /import", s.handleImport)
