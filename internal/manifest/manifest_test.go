@@ -1,0 +1,286 @@
+package manifest
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/vehagn/speaker-promos/internal/cnd"
+)
+
+func tempPath(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(t.TempDir(), "promos.yaml")
+}
+
+// The manifest in the README, verbatim, so the documented format is the one
+// that actually parses.
+const sample = `apiVersion: promo.cloudnativedays.no/v1alpha1
+kind: SpeakerOverride
+metadata:
+  name: gunvor-rønning
+spec:
+  employer: Bysten Labs
+  job: Infrastructure Engineer
+  links:
+    linkedin: https://www.linkedin.com/in/dario
+    bluesky: dario.bsky.social
+---
+apiVersion: promo.cloudnativedays.no/v1alpha1
+kind: TalkOverride
+metadata:
+  name: 584db4de-d0ac-4d3a-9fc7-33d541b6c862
+spec:
+  displayTitle: Kort tittel
+  hidden: false
+`
+
+func TestLoadSample(t *testing.T) {
+	path := tempPath(t)
+	if err := os.WriteFile(path, []byte(sample), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	set, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	sp, ok := set.Speaker("gunvor-rønning")
+	if !ok {
+		t.Fatal("speaker override not loaded")
+	}
+	if sp.Employer != "Bysten Labs" || sp.Job != "Infrastructure Engineer" {
+		t.Errorf("speaker spec = %+v", sp)
+	}
+	if sp.Links.Bluesky != "dario.bsky.social" {
+		t.Errorf("bluesky = %q", sp.Links.Bluesky)
+	}
+
+	tk, ok := set.Talk("584db4de-d0ac-4d3a-9fc7-33d541b6c862")
+	if !ok {
+		t.Fatal("talk override not loaded")
+	}
+	if tk.DisplayTitle != "Nok nok Nett" || tk.Hidden {
+		t.Errorf("talk spec = %+v", tk)
+	}
+
+	// The post package is what resolves overrides, so the bridge to it matters
+	// as much as the parse.
+	role := set.Overrides().RoleFor(cnd.Speaker{Slug: "gunvor-rønning", Title: "Bysten Labs"})
+	if role.Employer != "Bysten Labs" || role.Job != "Infrastructure Engineer" {
+		t.Errorf("RoleFor = %+v", role)
+	}
+	if role.Guessed {
+		t.Error("an overridden employer must not be reported as guessed")
+	}
+}
+
+func TestMissingFileIsEmpty(t *testing.T) {
+	set, err := Load(filepath.Join(t.TempDir(), "absent.yaml"))
+	if err != nil {
+		t.Fatalf("Load of a missing file: %v", err)
+	}
+	if s, tk := set.Len(); s != 0 || tk != 0 {
+		t.Errorf("Len = %d, %d; want 0, 0", s, tk)
+	}
+}
+
+// A save must be re-loadable and byte-stable, otherwise the file churns in git
+// every time the server touches it.
+func TestRoundTripIsStableAndSorted(t *testing.T) {
+	path := tempPath(t)
+	set := New(path)
+	for _, slug := range []string{"zoe", "adam", "mia"} {
+		if err := set.SetSpeaker(slug, SpeakerSpec{Employer: "Corp " + slug}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := set.SetTalk("t-2", TalkSpec{Hidden: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := set.SetTalk("t-1", TalkSpec{DisplayTitle: "Short"}); err != nil {
+		t.Fatal(err)
+	}
+
+	first, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if s, tk := reloaded.Len(); s != 3 || tk != 2 {
+		t.Fatalf("reloaded Len = %d, %d; want 3, 2", s, tk)
+	}
+	if err := reloaded.Save(); err != nil {
+		t.Fatal(err)
+	}
+	second, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(first) != string(second) {
+		t.Errorf("load → save is not byte-stable:\n--- first ---\n%s\n--- second ---\n%s", first, second)
+	}
+
+	// Sorted by kind, then name.
+	var order []string
+	for _, line := range strings.Split(string(first), "\n") {
+		if name, ok := strings.CutPrefix(strings.TrimSpace(line), "name: "); ok {
+			order = append(order, name)
+		}
+	}
+	want := []string{"adam", "mia", "zoe", "t-1", "t-2"}
+	if strings.Join(order, ",") != strings.Join(want, ",") {
+		t.Errorf("object order = %v; want %v", order, want)
+	}
+	if !strings.HasPrefix(string(first), "#") {
+		t.Error("saved manifest should start with its explanatory header")
+	}
+}
+
+// Clearing every field should remove the object rather than leave an empty one
+// behind, since the preview server writes on every keystroke-ish edit.
+func TestEmptySpecIsDeleted(t *testing.T) {
+	path := tempPath(t)
+	set := New(path)
+	if err := set.SetSpeaker("adam", SpeakerSpec{Employer: "Corp"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := set.SetSpeaker("adam", SpeakerSpec{Employer: "   "}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := set.Speaker("adam"); ok {
+		t.Error("override with only blank fields should have been removed")
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "adam") {
+		t.Errorf("manifest still mentions the cleared speaker:\n%s", b)
+	}
+}
+
+// The whole point of validating apiVersion and kind is that a typo is loud.
+func TestRejectsBadDocuments(t *testing.T) {
+	cases := []struct {
+		name, yaml, want string
+	}{
+		{
+			"wrong apiVersion",
+			"apiVersion: promo.cloudnativedays.no/v1\nkind: SpeakerOverride\nmetadata:\n  name: a\nspec:\n  employer: C\n",
+			"unsupported apiVersion",
+		},
+		{
+			"unknown kind",
+			"apiVersion: " + APIVersion + "\nkind: SpeakerOverrides\nmetadata:\n  name: a\nspec:\n  employer: C\n",
+			"unknown kind",
+		},
+		{
+			"missing name",
+			"apiVersion: " + APIVersion + "\nkind: SpeakerOverride\nmetadata: {}\nspec:\n  employer: C\n",
+			"metadata.name",
+		},
+		{
+			"typo in a spec field",
+			"apiVersion: " + APIVersion + "\nkind: SpeakerOverride\nmetadata:\n  name: a\nspec:\n  employeer: C\n",
+			`unknown field "employeer"`,
+		},
+		{
+			"typo in a link field",
+			"apiVersion: " + APIVersion + "\nkind: SpeakerOverride\nmetadata:\n  name: a\nspec:\n  links:\n    linkedn: x\n",
+			`unknown field "linkedn"`,
+		},
+		{
+			"typo at the top level",
+			"apiVersion: " + APIVersion + "\nkind: TalkOverride\nmetadata:\n  name: a\nspecs:\n  hidden: true\n",
+			`unknown field "specs"`,
+		},
+		{
+			"talk field on a speaker",
+			"apiVersion: " + APIVersion + "\nkind: SpeakerOverride\nmetadata:\n  name: a\nspec:\n  hidden: true\n",
+			`unknown field "hidden"`,
+		},
+		{
+			"duplicate object",
+			"apiVersion: " + APIVersion + "\nkind: TalkOverride\nmetadata:\n  name: a\nspec:\n  hidden: true\n---\n" +
+				"apiVersion: " + APIVersion + "\nkind: TalkOverride\nmetadata:\n  name: a\nspec:\n  hidden: false\n",
+			"duplicate",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			path := tempPath(t)
+			if err := os.WriteFile(path, []byte(c.yaml), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			_, err := Load(path)
+			if err == nil {
+				t.Fatalf("Load accepted %s", c.name)
+			}
+			if !strings.Contains(err.Error(), c.want) {
+				t.Errorf("error = %q; want it to mention %q", err, c.want)
+			}
+			if !strings.Contains(err.Error(), "line ") {
+				t.Errorf("error = %q; want it to name a line", err)
+			}
+		})
+	}
+}
+
+// Blank documents occur naturally when a file is edited by hand.
+func TestSkipsEmptyDocuments(t *testing.T) {
+	path := tempPath(t)
+	body := "---\n" + sample + "---\n# just a comment\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	set, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if s, tk := set.Len(); s != 1 || tk != 1 {
+		t.Errorf("Len = %d, %d; want 1, 1", s, tk)
+	}
+}
+
+func TestApplyRewritesAndFilters(t *testing.T) {
+	set := New(tempPath(t))
+	if err := set.SetTalk("keep", TalkSpec{DisplayTitle: "Short Title"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := set.SetTalk("gone", TalkSpec{Hidden: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	in := []cnd.Session{
+		{Talk: cnd.Talk{ID: "keep", Title: "A Very Long Original Title"}},
+		{Talk: cnd.Talk{ID: "gone", Title: "Cancelled"}},
+		{Talk: cnd.Talk{ID: "other", Title: "Untouched"}},
+	}
+	got := set.Apply(in)
+	if len(got) != 2 {
+		t.Fatalf("Apply returned %d sessions; want 2", len(got))
+	}
+	if got[0].Talk.Title != "Short Title" {
+		t.Errorf("title = %q; want the display title", got[0].Talk.Title)
+	}
+	if got[1].Talk.Title != "Untouched" {
+		t.Errorf("title = %q; want it unchanged", got[1].Talk.Title)
+	}
+	// Apply must not mutate the caller's slice.
+	if in[0].Talk.Title != "A Very Long Original Title" {
+		t.Errorf("Apply mutated its input: %q", in[0].Talk.Title)
+	}
+	// An explicit selection is rewritten but not filtered.
+	if s := set.Rewrite(in[1]); s.Talk.Title != "Cancelled" {
+		t.Errorf("Rewrite of a hidden talk = %q", s.Talk.Title)
+	}
+	if !set.Hidden("gone") || set.Hidden("keep") {
+		t.Error("Hidden disagrees with the specs")
+	}
+}
