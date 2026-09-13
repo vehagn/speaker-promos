@@ -101,7 +101,7 @@ func TestName(t *testing.T) {
 		"lars":              "Lars",
 		"jan ivar beddari":  "Jan Ivar Beddari",
 		"Dario Haaland":     "Dario Haaland",
-		"ÅSE NORDBØ":        "ÅSE NORDBØ", // already capitalised; left alone
+		"ÅSE NORDBØ":        "Åse Nordbø",
 		"øydis kind refsum": "Øydis Kind Refsum",
 		"  josvaz  ":        "Josvaz",
 		"":                  "",
@@ -168,5 +168,34 @@ func TestExpandsAcronymsInsideCompounds(t *testing.T) {
 	}
 	if got := Title("a hands-on introduction", lang.English); got != "A Hands-on Introduction" {
 		t.Errorf("Title = %q", got)
+	}
+}
+
+// An all-capitals word in a NAME is someone shouting their surname, so it is
+// title-cased. In a title the same word is more likely an acronym, which is why
+// the two are treated differently.
+func TestNameDeShoutsSurnames(t *testing.T) {
+	for in, want := range map[string]string{
+		"Abdel SGHIOUAR":    "Abdel Sghiouar",
+		"ÅSE NORDBØ":        "Åse Nordbø",
+		"JEROEN VAN ERP":    "Jeroen van Erp", // the particle stays lowercase
+		"ANNE-MARIE DUPONT": "Anne-Marie Dupont",
+		"O'BRIEN":           "O'Brien",
+		"MARIA DE LA CRUZ":  "Maria de la Cruz",
+	} {
+		if got := Name(in); got != want {
+			t.Errorf("Name(%q) = %q, want %q", in, got, want)
+		}
+	}
+
+	// A single-letter initial is not shouting.
+	if got := Name("J. R. TOLKIEN"); got != "J. R. Tolkien" {
+		t.Errorf("Name = %q", got)
+	}
+
+	// Titles keep their all-capitals words, because those are acronyms.
+	if got := Title("running YAML and SBOM checks", lang.English); got !=
+		"Running YAML and SBOM Checks" {
+		t.Errorf("Title = %q, want the acronyms untouched", got)
 	}
 }

@@ -165,14 +165,57 @@ func Name(name string) string {
 	words := strings.Fields(name)
 	for i, word := range words {
 		switch {
-		case keepAsWritten(word):
 		case i != 0 && particles[strings.ToLower(word)]:
+			// Checked before the shout rule so that "VAN ERP" still yields
+			// "van Erp" rather than "Van Erp".
 			words[i] = strings.ToLower(word)
+		case shouted(word):
+			// An all-capitals word in a NAME is someone shouting their
+			// surname — "Abdel SGHIOUAR". In a title the same word would more
+			// likely be an acronym, which is why this rule lives here and not
+			// in keepAsWritten.
+			words[i] = titleWord(word)
+		case keepAsWritten(word):
+			// Deliberate casing: McDonald, O'Brien, DuPont.
 		default:
 			words[i] = upperFirst(word)
 		}
 	}
 	return strings.Join(words, " ")
+}
+
+// shouted reports a word written entirely in capitals, with at least two
+// letters so that an initial ("J.") is left alone.
+func shouted(word string) bool {
+	letters := 0
+	for _, r := range word {
+		if !unicode.IsLetter(r) {
+			continue
+		}
+		if !unicode.IsUpper(r) {
+			return false
+		}
+		letters++
+	}
+	return letters >= 2
+}
+
+// titleWord lowercases a word and capitalises its first letter and the letter
+// after each hyphen or apostrophe, so "ANNE-MARIE" gives "Anne-Marie" and
+// "O'BRIEN" gives "O'Brien".
+func titleWord(word string) string {
+	runes := []rune(strings.ToLower(word))
+	upperNext := true
+	for i, r := range runes {
+		switch {
+		case upperNext && unicode.IsLetter(r):
+			runes[i] = unicode.ToUpper(r)
+			upperNext = false
+		case r == '-' || r == '\'' || r == '’':
+			upperNext = true
+		}
+	}
+	return string(runes)
 }
 
 // keepAsWritten reports a word whose spelling someone clearly chose.

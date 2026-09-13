@@ -434,8 +434,13 @@ Two rules keep it from making things worse:
   button would introduce errors of its own.
 
 Names get the first letter of each part capitalised — for the speakers who typed their own
-name in lower case — while `van`, `de`, `von` and friends stay lowercase mid-name, and
-`McDonald` survives.
+name in lower case — and an ALL-CAPITALS part is title-cased, so *"Abdel SGHIOUAR"* becomes
+*"Abdel Sghiouar"*. That is the one place the "spelling someone chose" rule is reversed: in
+a name an all-capitals word is someone shouting their surname, whereas in a title it is
+probably an acronym (`YAML`, `SBOM`), so titles keep theirs.
+
+`van`, `de`, `von` and friends stay lowercase mid-name even when shouted, single letters are
+left alone as initials, and `McDonald`, `O'Brien` and `DuPont` survive untouched.
 
 It is deliberately crude. Both buttons sit next to the field they change, so a wrong result
 is visible at once and fixed by typing.
