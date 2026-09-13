@@ -30,7 +30,7 @@ spec:
 apiVersion: promo.cloudnativedays.no/v1alpha1
 kind: TalkOverride
 metadata:
-  name: 584db4de-d0ac-4d3a-9fc7-33d541b6c862
+  name: 09b41694-27be-495d-abe3-1899bd725ad8
 spec:
   displayTitle: Kort tittel
   hidden: false
@@ -57,7 +57,7 @@ func TestLoadSample(t *testing.T) {
 		t.Errorf("bluesky = %q", sp.Links.Bluesky)
 	}
 
-	tk, ok := set.Talk("584db4de-d0ac-4d3a-9fc7-33d541b6c862")
+	tk, ok := set.Talk("09b41694-27be-495d-abe3-1899bd725ad8")
 	if !ok {
 		t.Fatal("talk override not loaded")
 	}

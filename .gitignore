@@ -5,10 +5,14 @@
 # Generated promos
 /out/
 
-# Local theme overrides. The promo manifest (promos.yaml) is deliberately NOT
-# ignored: it is the record of every correction made to the guessed data, and
-# reviewing it in a diff is the point.
+# Local theme overrides.
 /theme.yaml
+
+# This repository has no real corrections to record, and running the tool from
+# the checkout root leaves a promos.yaml behind. In a working checkout the
+# manifest IS meant to be committed — reviewing corrections in a diff is the
+# point — so drop this line if you start using it here.
+/promos.yaml
 
 # Editors
 .idea/

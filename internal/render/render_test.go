@@ -59,7 +59,7 @@ func testSession() cnd.Session {
 		StartTime: "13:20",
 		EndTime:   "13:45",
 		Talk: cnd.Talk{
-			ID:     "584db4de-d0ac-4d3a-9fc7-33d541b6c862",
+			ID:     "09b41694-27be-495d-abe3-1899bd725ad8",
 			Title:  "Pods on Mars: Selvberget Kubernetes",
 			Format: "presentation_25",
 			Level:  "intermediate",

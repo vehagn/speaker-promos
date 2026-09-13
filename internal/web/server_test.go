@@ -16,7 +16,7 @@ import (
 	"github.com/vehagn/speaker-promos/internal/theme"
 )
 
-const talkID = "584db4de-d0ac-4d3a-9fc7-33d541b6c862"
+const talkID = "09b41694-27be-495d-abe3-1899bd725ad8"
 
 // testLogo stands in for the ~190 KB conference wordmark; all the renderer
 // needs is a viewBox to scale against.

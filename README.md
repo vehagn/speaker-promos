@@ -53,7 +53,7 @@ Every command that takes a talk accepts a `<selector>`, resolved most-specific f
 
 | Tier | Example |
 |---|---|
-| Talk id prefix | `584db4de` |
+| Talk id prefix | `09b41694` |
 | Speaker slug | `dario-haaland`, `audun-oygard` |
 | Talk title substring | `"nok nett"`, `nok-nett` |
 | Speaker name substring | `"haaland"` |
@@ -373,7 +373,7 @@ spec:
 apiVersion: promo.cloudnativedays.no/v1alpha1
 kind: TalkOverride
 metadata:
-  name: 584db4de-d0ac-4d3a-9fc7-33d541b6c862   # talk id
+  name: 09b41694-27be-495d-abe3-1899bd725ad8   # talk id
 spec:
   displayTitle: Kort tittel
   hidden: false
