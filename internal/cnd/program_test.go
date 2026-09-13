@@ -172,7 +172,7 @@ func TestAbstractsAreFlattenedPlainText(t *testing.T) {
 
 func TestSpeakerImageURL(t *testing.T) {
 	s := Speaker{Image: "https://cdn.sanity.io/images/mvzwvw14/production/abc-740x827.png"}
-	if got, want := s.ImageURL(600), s.Image+"?w=600&h=600&fit=crop"; got != want {
+	if got, want := s.ImageURL(600), s.Image+"?w=600&h=600&fit=crop&fm=jpg&q=82"; got != want {
 		t.Errorf("ImageURL = %q", got)
 	}
 	// An URL that already carries a query must gain "&", not a second "?".

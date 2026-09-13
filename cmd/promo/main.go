@@ -20,6 +20,7 @@ Usage:
   promo svg  [flags] <selector>...   render promo SVGs
   promo post [flags] <selector>      draft LinkedIn / Bluesky copy
   promo fonts install                install the brand fonts locally
+  promo theme dump                   print the built-in theme as YAML
 
 A <selector> picks talks by id prefix, speaker slug, or a substring of the
 talk title, e.g. "gunvor-rønning" or "Nok nok nett". Use --all to
@@ -47,6 +48,10 @@ func run(args []string) error {
 	switch cmd {
 	case "list":
 		return cmdList(rest)
+	case "fonts":
+		return cmdFonts(rest)
+	case "theme":
+		return cmdTheme(rest)
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 		return nil

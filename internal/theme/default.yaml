@@ -1,0 +1,175 @@
+# Cloud Native Days Norway 2026 — the built-in promo theme.
+#
+# Colours mirror the live website's brand pair (--brand-primary / --brand-accent
+# on 2026.cloudnativedays.no), so a promo sits alongside the site's own share
+# cards without clashing.
+#
+# Override any subset of this in your own file and pass it with --theme; omitted
+# keys keep the values below.
+name: cnd-2026
+
+palette:
+  gradientFrom: "#1D4ED8"   # --brand-primary
+  gradientTo: "#06B6D4"     # --brand-accent
+  text: "#FFFFFF"
+  textMuted: "rgba(255,255,255,0.88)"
+  accent: "#A5F3FC"         # light cyan, for eyebrow labels on the gradient
+  cardFill: "rgba(255,255,255,0.13)"
+  cardStroke: "rgba(255,255,255,0.24)"
+  photoStroke: "rgba(255,255,255,0.30)"
+
+# Space Grotesk is the website's display family. Only the faces referenced by a
+# geometry's text styles are embedded in a rendered card, so listing a face here
+# costs nothing until it is used.
+fonts:
+  heading:
+    family: Space Grotesk
+    file: SpaceGrotesk-Bold.ttf
+    weight: 700
+    style: normal
+  body:
+    family: Space Grotesk
+    file: SpaceGrotesk-Medium.ttf
+    weight: 500
+    style: normal
+  light:
+    family: Space Grotesk
+    file: SpaceGrotesk-Regular.ttf
+    weight: 400
+    style: normal
+
+# Talk titles contain emoji (a Norwegian flag, in the 2026 program) and no text
+# font covers them. Runs the text face cannot render are split out and handed to
+# these families instead.
+emojiFallback: "Apple Color Emoji, Noto Color Emoji, Segoe UI Emoji"
+
+geometry:
+  # 2:3 portrait, as used for the 2025 promos. Tall cards occupy more of the
+  # LinkedIn feed, which is the main place these get posted.
+  portrait:
+    width: 1400
+    height: 2100
+    pad: 110
+    gap: 52
+    radius: 44
+    logoWidth: 620
+    photoSize: 640
+    text:
+      meta:
+        face: body
+        minSize: 34
+        maxSize: 34
+        maxLines: 1
+        lineHeight: 1.2
+        tracking: 0.08
+        uppercase: true
+        color: textMuted
+        opacity: 1
+      name:
+        face: heading
+        minSize: 58
+        maxSize: 92
+        maxLines: 2
+        lineHeight: 1.05
+        color: text
+        opacity: 1
+      role:
+        face: body
+        minSize: 30
+        maxSize: 42
+        maxLines: 2
+        lineHeight: 1.25
+        color: textMuted
+        opacity: 1
+      eyebrow:
+        face: body
+        minSize: 28
+        maxSize: 28
+        maxLines: 1
+        lineHeight: 1.2
+        tracking: 0.18
+        uppercase: true
+        color: accent
+        opacity: 1
+      talk:
+        face: heading
+        minSize: 46
+        maxSize: 82
+        maxLines: 5
+        lineHeight: 1.1
+        color: text
+        opacity: 1
+      footer:
+        face: body
+        minSize: 32
+        maxSize: 32
+        maxLines: 1
+        lineHeight: 1.2
+        tracking: 0.04
+        color: textMuted
+        opacity: 1
+
+  # 1200x630, the OpenGraph ratio the website's own share cards use. Photo and
+  # speaker block sit left, talk card right.
+  landscape:
+    width: 1200
+    height: 630
+    pad: 48
+    gap: 24
+    radius: 24
+    logoWidth: 300
+    photoSize: 260
+    text:
+      meta:
+        face: body
+        minSize: 18
+        maxSize: 18
+        maxLines: 1
+        lineHeight: 1.2
+        tracking: 0.06
+        uppercase: true
+        color: textMuted
+        opacity: 1
+      name:
+        face: heading
+        minSize: 28
+        maxSize: 42
+        maxLines: 2
+        lineHeight: 1.05
+        color: text
+        opacity: 1
+      role:
+        face: body
+        minSize: 17
+        maxSize: 22
+        maxLines: 2
+        lineHeight: 1.25
+        color: textMuted
+        opacity: 1
+      eyebrow:
+        face: body
+        minSize: 18
+        maxSize: 18
+        maxLines: 1
+        lineHeight: 1.2
+        tracking: 0.16
+        uppercase: true
+        color: accent
+        opacity: 1
+      talk:
+        face: heading
+        minSize: 26
+        maxSize: 46
+        maxLines: 5
+        lineHeight: 1.12
+        color: text
+        opacity: 1
+      footer:
+        face: body
+        minSize: 18
+        maxSize: 18
+        maxLines: 1
+        tracking: 0.04
+        lineHeight: 1.2
+        color: textMuted
+        opacity: 1

@@ -49,9 +49,12 @@ func (s Speaker) ImageURL(size int) string {
 	if strings.Contains(s.Image, "?") {
 		sep = "&"
 	}
-	// `auto=format` is deliberately omitted: the fetcher sends `Accept: */*`,
-	// so it would only widen the set of codecs handed back for no benefit.
-	return fmt.Sprintf("%s%sw=%d&h=%d&fit=crop", s.Image, sep, size, size)
+	// JPEG, not the source PNG: these get base64-embedded into an SVG, and at
+	// 600px the PNG rendition is 600 KB against 47 KB for JPEG at q=82 — a 13x
+	// difference in the size of every promo. `fm` is set explicitly rather than
+	// via `auto=format` because the fetcher sends `Accept: */*`, which would
+	// leave the choice of codec up to the CDN.
+	return fmt.Sprintf("%s%sw=%d&h=%d&fit=crop&fm=jpg&q=82", s.Image, sep, size, size)
 }
 
 // Talk is an accepted session.
