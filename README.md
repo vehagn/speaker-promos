@@ -9,6 +9,7 @@ Posting stays manual — this tool removes the copy-paste-retype step, not the j
 go run ./cmd/promo serve                       # preview and edit everything in a browser
 go run ./cmd/promo list                        # index the program
 go run ./cmd/promo export --all --out out/     # a folder per talk: cards, copy, config
+go run ./cmd/promo import out/                 # merge edited promo.yaml files back
 go run ./cmd/promo post dario-haaland          # draft LinkedIn / Bluesky copy
 ```
 
@@ -118,8 +119,9 @@ got a real photo or fell back to initials. Below it sit the editable `SpeakerOve
 where you made one, the guess otherwise.
 
 `TalkInfo` is ignored when the file is loaded, so a bundle can be passed straight back with
-`--manifest` after editing — no need to strip the record first. There is deliberately no
-generation timestamp, so re-exporting produces an identical folder.
+`--manifest` after editing — no need to strip the record first, and `promo import` merges it
+into the project manifest. There is deliberately no generation timestamp, so re-exporting
+produces an identical folder.
 
 Cards are self-contained: the speaker photo is an embedded JPEG and the typefaces are
 base64 `@font-face` rules, so one SVG is the whole artifact. Text is real editable
@@ -293,6 +295,59 @@ Startup fetches the 49 speaker profile pages once (~3 MB each, then cached on di
 that page loads are instant. `--no-links` skips it entirely. Cards are served as the same
 self-contained SVGs you would post, so the preview is the artifact rather than an
 approximation — which does mean a fully scrolled page pulls ~24 MB from localhost.
+
+## `promo import`
+
+Merges edited bundle manifests back into the project manifest, closing the loop that
+`promo export` opens:
+
+```sh
+go run ./cmd/promo import out/                          # every bundle under out/
+go run ./cmd/promo import out/d1-0900-dario-haaland*/   # one bundle
+go run ./cmd/promo import path/to/promo.yaml            # one file
+go run ./cmd/promo import out/ --dry-run                # report, write nothing
+```
+
+A directory is searched for `promo.yaml` rather than rejected, since what you have after an
+export is `out/` with a folder per talk.
+
+**It imports the edits, not the file.** An exported `promo.yaml` pre-fills the name and the
+guessed employer, so importing it verbatim would turn every guess into a confirmed
+correction and silence the warnings that exist to be read. Each field is compared against
+what the tool would say with no override at all, and only genuine differences are taken:
+
+```
+$ go run ./cmd/promo import out/
+importing 36 file(s)
+
+out/d1-0900-dario-haaland-kan-skyen-kjore-pa-en-brodrister/promo.yaml
+  SpeakerOverride/dario-haaland employer: "Bysten Labs AS"
+  SpeakerOverride/dario-haaland image: "photos/dario.jpg"
+  SpeakerOverride/dario-haaland name: "Dárió Håaland"
+
+3 change(s) written to promos.yaml
+```
+
+Overwriting a value the project manifest already has shows both, so a conflict is visible
+rather than silent — and the import wins, since you asked for it:
+
+```
+  SpeakerOverride/dario-haaland employer: "Bysten Labs AS" → "Bysten Labs ASA"
+```
+
+Re-importing an unchanged bundle reports nothing.
+
+`--confirm-guesses` imports the pre-filled values too. That is how you say *yes, that guess
+was right* and stop being asked about it.
+
+Two omissions are deliberate. A field a bundle does not mention leaves the project
+manifest's value alone, because otherwise half the bundles would clear whatever they
+happened not to carry. And `hidden` can only be turned **on** by an import: it is a bool, so
+"unset" and "false" are indistinguishable in the file — unhide in the project manifest or
+the browser, where the intent is unambiguous.
+
+The whole merge is written once, under one lock, so an import either lands completely or
+not at all.
 
 ## Overrides
 

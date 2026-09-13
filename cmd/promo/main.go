@@ -19,6 +19,7 @@ const usage = `promo — speaker promo graphics for Cloud Native Days
 Usage:
   promo list [flags]                 index the program
   promo export [flags] <selector>... write a folder per talk: cards, copy, config
+  promo import [flags] <path>...     merge edited promo.yaml files back
   promo post [flags] <selector>      draft LinkedIn / Bluesky copy
   promo serve [flags]                preview every card in a browser and edit
   promo fonts install                install the brand fonts locally
@@ -52,6 +53,8 @@ func run(args []string) error {
 		return cmdList(rest)
 	case "export":
 		return cmdExport(rest)
+	case "import":
+		return cmdImport(rest)
 	case "post":
 		return cmdPost(rest)
 	case "serve":
@@ -154,6 +157,8 @@ func positionalHint(cmd string) string {
 	switch cmd {
 	case "export":
 		return "<selector>..."
+	case "import":
+		return "<path>..."
 	case "post":
 		return "<selector>"
 	default:
