@@ -1,0 +1,14 @@
+# Build output
+/promo
+/dist/
+
+# Generated promos
+/out/
+
+# Local overrides
+/speakers.yaml
+/theme.yaml
+
+# Editors
+.idea/
+.DS_Store
