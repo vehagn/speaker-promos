@@ -25,7 +25,7 @@
           <div>
             <label for="title-{{.Anchor}}">Display title (blank = as submitted)</label>
             <input type="text" id="title-{{.Anchor}}" name="displayTitle"
-                   value="{{.Talk.DisplayTitle}}" placeholder="{{.Session.Talk.Title}}"
+                   value="{{.Session.Talk.Title}}" placeholder="as submitted"
                    hx-post="/talk/{{.Session.Talk.ID}}" hx-target="#{{.Anchor}}"
                    hx-swap="outerHTML" hx-trigger="change" hx-include="closest form">
           </div>
@@ -70,43 +70,43 @@
         <div class="grid">
           <div>
             <label>Name</label>
-            <input type="text" name="name" value="{{.Override.Name}}"
-                   placeholder="{{.Speaker.Name}}">
+            <input type="text" name="name" value="{{.Effective.Name}}"
+                   placeholder="unknown">
           </div>
           <div>
             <label>Employer</label>
-            <input type="text" name="employer" value="{{.Override.Employer}}"
-                   placeholder="{{with .Role.Employer}}{{.}}{{else}}unknown{{end}}">
+            <input type="text" name="employer" value="{{.Effective.Employer}}"
+                   placeholder="unknown">
             {{if .Guessed}}<p class="hint">guessed from “{{.Speaker.Title}}”</p>{{end}}
           </div>
           <div>
             <label>Job title</label>
-            <input type="text" name="job" value="{{.Override.Job}}" placeholder="{{.Role.Job}}">
+            <input type="text" name="job" value="{{.Effective.Job}}" placeholder="none">
           </div>
           <div>
             <label>Role line (verbatim)</label>
-            <input type="text" name="title" value="{{.Override.Title}}"
-                   placeholder="{{.Speaker.Title}}">
+            <input type="text" name="title" value="{{.Effective.Title}}"
+                   placeholder="composed from employer + job">
           </div>
           <div class="{{if not .HasPhoto}}missing{{end}}">
             <label>Photo {{if not .HasPhoto}}— none, showing initials{{end}}</label>
-            <input type="text" name="image" value="{{.Override.Image}}"
-                   placeholder="{{with .Speaker.Image}}{{.}}{{else}}URL or a file path{{end}}">
+            <input type="text" name="image" value="{{.Effective.Image}}"
+                   placeholder="URL or a file path">
           </div>
           <div>
             <label>LinkedIn</label>
-            <input type="text" name="linkedin" value="{{.Override.Links.LinkedIn}}"
-                   placeholder="{{with .Links.LinkedIn}}{{.}}{{else}}none found{{end}}">
+            <input type="text" name="linkedin" value="{{.Effective.Links.LinkedIn}}"
+                   placeholder="none found">
           </div>
           <div>
             <label>Bluesky</label>
-            <input type="text" name="bluesky" value="{{.Override.Links.Bluesky}}"
-                   placeholder="{{with .Links.Bluesky}}{{.}}{{else}}none found{{end}}">
+            <input type="text" name="bluesky" value="{{.Effective.Links.Bluesky}}"
+                   placeholder="none found">
           </div>
           <div>
             <label>X</label>
-            <input type="text" name="x" value="{{.Override.Links.X}}"
-                   placeholder="{{with .Links.X}}{{.}}{{else}}none found{{end}}">
+            <input type="text" name="x" value="{{.Effective.Links.X}}"
+                   placeholder="none found">
           </div>
         </div>
       </form>

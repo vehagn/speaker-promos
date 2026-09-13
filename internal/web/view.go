@@ -25,6 +25,10 @@ type talkView struct {
 	Speakers []speakerView
 	Drafts   []draftView
 	Talk     manifest.TalkSpec
+	// SubmittedTitle is the talk's title before any displayTitle override. The
+	// form is pre-filled with the effective title, so this is what a submission
+	// is diffed against.
+	SubmittedTitle string
 	// Hidden is kept separate from Talk so the template does not have to know
 	// that a missing override means "not hidden".
 	Hidden bool
@@ -44,10 +48,22 @@ type speakerView struct {
 	Speaker cnd.Speaker
 	Role    post.Role
 	Links   cnd.Links
-	// Override holds what the manifest currently says, which is what the form
-	// inputs show. It is empty for a speaker with no corrections yet, so the
-	// placeholders fall back to the guessed values.
+	// Override holds what the manifest currently says. It is empty for a
+	// speaker with no corrections yet.
 	Override manifest.SpeakerSpec
+	// Effective is what the card and copy actually use: the correction where
+	// there is one, otherwise the value the tool found. It is what the form
+	// inputs are pre-filled with, so a found value can be edited in place
+	// rather than retyped from a grey placeholder.
+	//
+	// Because every field therefore arrives populated, the handler stores only
+	// what differs from Baseline. Writing the lot back would turn every guess
+	// into a confirmed correction the first time any field was touched.
+	Effective manifest.SpeakerSpec
+	// Baseline is the same speaker with no override at all — what the program
+	// and the scrape give. The handler diffs against it; the view uses it to
+	// tell a found value from a corrected one.
+	Baseline manifest.SpeakerSpec
 	// Guessed marks an employer that came from the heuristic rather than the
 	// manifest, so the form can flag it for checking.
 	Guessed bool
@@ -108,4 +124,23 @@ func domID(s string) string {
 		}
 	}
 	return b.String()
+}
+
+// Corrected reports whether a field currently differs from what was found,
+// which is what the form marks as yours rather than the tool's.
+func (v speakerView) Corrected(field string) bool {
+	switch field {
+	case "name":
+		return v.Override.Name != "" && v.Override.Name != v.Baseline.Name
+	case "employer":
+		return v.Override.Employer != "" && v.Override.Employer != v.Baseline.Employer
+	case "job":
+		return v.Override.Job != "" && v.Override.Job != v.Baseline.Job
+	case "title":
+		return v.Override.Title != "" && v.Override.Title != v.Baseline.Title
+	case "image":
+		return v.Override.Image != "" && v.Override.Image != v.Baseline.Image
+	default:
+		return false
+	}
 }

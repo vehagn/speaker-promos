@@ -209,6 +209,11 @@ func (s *Server) handleTalkUpdate(w http.ResponseWriter, r *http.Request) {
 		Hidden:       r.FormValue("hidden") != "",
 		Language:     strings.TrimSpace(r.FormValue("language")),
 	}
+	// The title input is pre-filled with the title in use, so submitting it
+	// unchanged is not a shortening.
+	if spec.DisplayTitle == sess.Talk.Title {
+		spec.DisplayTitle = ""
+	}
 	if _, err := post.ParseLanguage(spec.Language); err != nil {
 		s.fail(w, err)
 		return
@@ -246,7 +251,7 @@ func (s *Server) handleSpeakerUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	spec := manifest.SpeakerSpec{
+	submitted := manifest.SpeakerSpec{
 		Name:     strings.TrimSpace(r.FormValue("name")),
 		Employer: strings.TrimSpace(r.FormValue("employer")),
 		Job:      strings.TrimSpace(r.FormValue("job")),
@@ -258,6 +263,55 @@ func (s *Server) handleSpeakerUpdate(w http.ResponseWriter, r *http.Request) {
 			X:        strings.TrimPrefix(strings.TrimSpace(r.FormValue("x")), "@"),
 		},
 	}
+
+	// The form arrives fully populated, because its inputs are pre-filled with
+	// the values in use so they can be edited in place. Only what differs from
+	// what was found is a correction; storing the rest would mark every guess
+	// as confirmed the first time any field was touched, and put a copy of the
+	// whole speaker in the manifest.
+	var base manifest.SpeakerSpec
+	for _, sp := range sess.Talk.Speakers {
+		if sp.Slug == slug {
+			base = speakerBaseline(sp, s.speakerLinks(sp))
+			break
+		}
+	}
+	existing, _ := s.opts.Set.Speaker(slug)
+
+	// The role line is a composed field, which makes it the one field a plain
+	// diff cannot judge.
+	//
+	// It is pre-filled with the line the card draws, composed from employer and
+	// job. So when you edit the EMPLOYER, the title input still holds the line
+	// composed from the OLD employer — stale, but untouched. Diffing that
+	// against the new composition would read it as a deliberate verbatim
+	// override and freeze the role line, so employer and job would never drive
+	// it again.
+	//
+	// A submission therefore counts as unedited if it matches either what the
+	// field was pre-filled with, or what the other submitted fields now
+	// compose to. Typing the old value on purpose is indistinguishable from
+	// leaving it, and harmless: the result is the same string.
+	prior := existing.RoleTitle()
+	if prior == "" {
+		prior = base.Title
+	}
+	composed := manifest.SpeakerSpec{
+		Employer: pickNonEmpty(submitted.Employer, base.Employer),
+		Job:      pickNonEmpty(submitted.Job, base.Job),
+	}
+	fresh := composed.RoleTitle()
+	if fresh == "" {
+		fresh = base.Title
+	}
+	if submitted.Title == prior || submitted.Title == fresh {
+		submitted.Title = ""
+	}
+	base.Title = fresh
+
+	spec := onlyChanges(submitted, base)
+	// GitHub has no input, so it is carried over rather than diffed.
+	spec.Links.GitHub = existing.Links.GitHub
 
 	s.mu.Lock()
 	err := s.opts.Set.SetSpeaker(slug, spec)
@@ -493,6 +547,90 @@ func (s *Server) hasPhoto(sp cnd.Speaker) bool {
 	return ok
 }
 
+// speakerBaseline is a speaker with no override at all: the program's own
+// name, title and photo, the employer guessed out of the free text, and the
+// handles scraped from their profile page.
+//
+// It is what the form's pre-filled values are diffed against, so touching one
+// field cannot quietly record the rest of the found values as corrections.
+func speakerBaseline(sp cnd.Speaker, links cnd.Links) manifest.SpeakerSpec {
+	role := post.ParseRole(sp.Title)
+	return manifest.SpeakerSpec{
+		Name:     sp.Name,
+		Employer: role.Employer,
+		Job:      role.Job,
+		Title:    sp.Title,
+		Image:    sp.Image,
+		Links: manifest.Links{
+			LinkedIn: links.LinkedIn,
+			Bluesky:  links.Bluesky,
+			X:        links.X,
+			GitHub:   links.GitHub,
+		},
+	}
+}
+
+// effectiveSpeaker is what the card and copy actually use, which is what the
+// form's inputs are pre-filled with.
+//
+// Name, role line and photo are taken from the RENDERED speaker rather than
+// recomposed here: that is the speaker the card was drawn from, so the field
+// cannot show something the artwork does not. It matters most for the role
+// line, which the card composes from an employer and job override — showing
+// the upstream text there while the card said something else was precisely the
+// drift this is meant to remove.
+func effectiveSpeaker(base manifest.SpeakerSpec, rendered cnd.Speaker,
+	override manifest.SpeakerSpec) manifest.SpeakerSpec {
+	pick := func(over, found string) string {
+		if over != "" {
+			return over
+		}
+		return found
+	}
+	return manifest.SpeakerSpec{
+		Name:     rendered.Name,
+		Employer: pick(override.Employer, base.Employer),
+		Job:      pick(override.Job, base.Job),
+		Title:    rendered.Title,
+		Image:    rendered.Image,
+		Links: manifest.Links{
+			LinkedIn: pick(override.Links.LinkedIn, base.Links.LinkedIn),
+			Bluesky:  pick(override.Links.Bluesky, base.Links.Bluesky),
+			X:        pick(override.Links.X, base.Links.X),
+			GitHub:   pick(override.Links.GitHub, base.Links.GitHub),
+		},
+	}
+}
+
+// onlyChanges reduces a submitted spec to what actually differs from the
+// baseline, so the manifest records corrections and not a copy of everything
+// the tool already knew.
+//
+// A field submitted empty is treated as "no opinion" rather than "make it
+// empty": an override has no way to express an explicit blank, and the value
+// simply reverts to what was found — which the form then shows again.
+func onlyChanges(submitted, base manifest.SpeakerSpec) manifest.SpeakerSpec {
+	keep := func(value, found string) string {
+		if value == "" || value == found {
+			return ""
+		}
+		return value
+	}
+	return manifest.SpeakerSpec{
+		Name:     keep(submitted.Name, base.Name),
+		Employer: keep(submitted.Employer, base.Employer),
+		Job:      keep(submitted.Job, base.Job),
+		Title:    keep(submitted.Title, base.Title),
+		Image:    keep(submitted.Image, base.Image),
+		Links: manifest.Links{
+			LinkedIn: keep(submitted.Links.LinkedIn, base.Links.LinkedIn),
+			Bluesky:  keep(submitted.Links.Bluesky, base.Links.Bluesky),
+			X:        keep(submitted.Links.X, base.Links.X),
+			GitHub:   keep(submitted.Links.GitHub, base.Links.GitHub),
+		},
+	}
+}
+
 // buildViewLocked assembles a talk's view. Callers must hold s.mu, and must
 // have gathered p outside it.
 func (s *Server) buildViewLocked(sess cnd.Session, size string, p probes) talkView {
@@ -507,6 +645,7 @@ func (s *Server) buildViewLocked(sess cnd.Session, size string, p probes) talkVi
 		Hidden:  set.Hidden(sess.Talk.ID),
 	}
 	view.Talk, _ = set.Talk(sess.Talk.ID)
+	view.SubmittedTitle = sess.Talk.Title
 
 	lang := set.LanguageFor(sess.Talk.ID)
 	if lang == post.Auto {
@@ -533,13 +672,16 @@ func (s *Server) buildViewLocked(sess cnd.Session, size string, p probes) talkVi
 			rendered = rewritten.Talk.Speakers[i]
 		}
 
+		base := speakerBaseline(sp, p.linksFor(sp.Slug))
 		view.Speakers = append(view.Speakers, speakerView{
-			Speaker:  sp,
-			Role:     role,
-			Links:    links,
-			Override: override,
-			Guessed:  role.Guessed,
-			HasPhoto: p.photoFor(sp.Slug),
+			Speaker:   sp,
+			Role:      role,
+			Links:     links,
+			Override:  override,
+			Baseline:  base,
+			Effective: effectiveSpeaker(base, rendered, override),
+			Guessed:   role.Guessed,
+			HasPhoto:  p.photoFor(sp.Slug),
 		})
 		in.Speakers = append(in.Speakers, post.Speaker{Speaker: rendered, Role: role, Links: links})
 	}
@@ -590,4 +732,12 @@ func (s *Server) exporter(sizes []string) *export.Exporter {
 		Converter:    s.converter,
 		HasConverter: s.hasConverter,
 	}
+}
+
+// pickNonEmpty is the first non-empty of the two.
+func pickNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }

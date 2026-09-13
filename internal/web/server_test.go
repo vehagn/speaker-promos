@@ -475,10 +475,9 @@ func TestCorrectedNameReachesBothCardAndCopy(t *testing.T) {
 		t.Error("the card still shows the uncorrected name")
 	}
 
-	// The form keeps the CMS value as its placeholder, since that is what an
-	// override is being compared against.
-	if !strings.Contains(frag, `placeholder="Dario Haaland"`) {
-		t.Error("the form should still show the original name as a placeholder")
+	// The form now shows the corrected value, since that is what it edits.
+	if !strings.Contains(frag, `value="Dárió Håaland"`) {
+		t.Error("the name input should hold the corrected name")
 	}
 
 	// The card's role line is the verbatim title.
@@ -870,5 +869,195 @@ func TestIndexDoesNotWaitOnADeadPhotoHost(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
 		t.Errorf("an edit took %v with a dead photo host", elapsed)
+	}
+}
+
+// A found value has to be editable in place. Showing it only as a grey
+// placeholder meant retyping it to change one character.
+func TestFormIsPrefilledWithTheValuesInUse(t *testing.T) {
+	_, h, _ := newTestServer(t)
+	body := get(t, h, "/talk/"+talkID).Body.String()
+
+	for _, want := range []string{
+		// The employer guessed out of the profile title, in the input itself.
+		`name="employer" value="Bysten Labs"`,
+		// The name the CMS has.
+		`name="name" value="Dario Haaland"`,
+		// And the talk's own title, so shortening it is an edit not a retype.
+		`name="displayTitle"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("form missing %q:\n%s", want, body)
+		}
+	}
+	if !strings.Contains(body, `value="Nok nett"`) {
+		t.Error("the display title input is not pre-filled with the title in use")
+	}
+	// Placeholders are now only for genuinely empty fields.
+	if strings.Contains(body, `placeholder="Bysten Labs"`) {
+		t.Error("the found employer is still only a placeholder")
+	}
+}
+
+// Because the form arrives fully populated, the handler must store only what
+// changed. Writing the lot back would mark every guess as confirmed the first
+// time any field was touched.
+func TestEditingOneFieldDoesNotConfirmTheRest(t *testing.T) {
+	_, h, manifestPath := newTestServer(t)
+
+	// Submit the whole form with only the name altered — exactly what the
+	// browser sends when you edit one input.
+	rec := postForm(t, h, "/speaker/dario-haaland", url.Values{
+		"talk":     {talkID},
+		"name":     {"Dárió Håaland"},
+		"employer": {"Bysten Labs"}, // unchanged: the guess
+		"job":      {""},
+		"title":    {"Bysten Labs"}, // unchanged: the upstream role line
+		"image":    {""},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d\n%s", rec.Code, rec.Body)
+	}
+
+	saved, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(saved), "name: Dárió Håaland") {
+		t.Errorf("the edit was not stored:\n%s", saved)
+	}
+	// The guessed employer must NOT have been recorded as a correction.
+	if strings.Contains(string(saved), "employer:") {
+		t.Errorf("an unchanged guess was stored as a correction:\n%s", saved)
+	}
+	if strings.Contains(string(saved), "title:") {
+		t.Errorf("an unchanged role line was stored:\n%s", saved)
+	}
+
+	// And the employer is still reported as a guess, which is the point.
+	frag := rec.Body.String()
+	if !strings.Contains(frag, "guessed from") {
+		t.Error("editing the name silenced the employer guess")
+	}
+}
+
+// Submitting the form untouched must change nothing at all.
+func TestSubmittingAnUnchangedFormStoresNothing(t *testing.T) {
+	_, h, manifestPath := newTestServer(t)
+
+	rec := postForm(t, h, "/speaker/dario-haaland", url.Values{
+		"talk":     {talkID},
+		"name":     {"Dario Haaland"},
+		"employer": {"Bysten Labs"},
+		"title":    {"Bysten Labs"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if body, err := os.ReadFile(manifestPath); err == nil {
+		if strings.Contains(string(body), "dario-haaland") {
+			t.Errorf("an unchanged submission wrote an override:\n%s", body)
+		}
+	}
+}
+
+// Clearing a pre-filled field is "no opinion", not "make it empty": an override
+// cannot express a blank, so the value reverts to what was found and the form
+// shows it again.
+func TestClearingAFieldRevertsToTheFoundValue(t *testing.T) {
+	_, h, _ := newTestServer(t)
+
+	// Correct it, then clear it.
+	postForm(t, h, "/speaker/dario-haaland", url.Values{
+		"talk": {talkID}, "name": {"Dárió Håaland"},
+	})
+	rec := postForm(t, h, "/speaker/dario-haaland", url.Values{
+		"talk": {talkID}, "name": {""},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), `name="name" value="Dario Haaland"`) {
+		t.Errorf("clearing did not revert to the found name:\n%s", rec.Body)
+	}
+}
+
+// The talk's title input is pre-filled too, so submitting it unchanged must not
+// be recorded as a shortening.
+func TestUnchangedDisplayTitleIsNotStored(t *testing.T) {
+	_, h, manifestPath := newTestServer(t)
+
+	rec := postForm(t, h, "/talk/"+talkID, url.Values{
+		"displayTitle": {"Nok nett"}, // the title as submitted
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if body, err := os.ReadFile(manifestPath); err == nil {
+		if strings.Contains(string(body), "displayTitle") {
+			t.Errorf("the unchanged title was stored:\n%s", body)
+		}
+	}
+
+	// A real shortening still is.
+	postForm(t, h, "/talk/"+talkID, url.Values{"displayTitle": {"Kortere"}})
+	body, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "displayTitle: Kortere") {
+		t.Errorf("a real shortening was not stored:\n%s", body)
+	}
+}
+
+// The role line input shows the line the CARD draws, which the card composes
+// from employer and job. Showing the upstream text there while the card said
+// something else is the drift this pre-filling is meant to remove — and
+// diffing against the upstream would record the composed line as a verbatim
+// override, freezing it so employer and job stopped driving it.
+func TestRoleLineFieldTracksTheCard(t *testing.T) {
+	_, h, manifestPath := newTestServer(t)
+
+	// Correct only the employer.
+	rec := postForm(t, h, "/speaker/dario-haaland", url.Values{
+		"talk":     {talkID},
+		"name":     {"Dario Haaland"},
+		"employer": {"Bysten Labs AS"},
+		"title":    {"Bysten Labs"}, // as shown before the edit
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d\n%s", rec.Code, rec.Body)
+	}
+
+	// Only the employer is stored; the role line is still composed.
+	saved, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(saved), "employer: Bysten Labs AS") {
+		t.Errorf("employer not stored:\n%s", saved)
+	}
+	if strings.Contains(string(saved), "title:") {
+		t.Errorf("the composed role line was frozen as an override:\n%s", saved)
+	}
+
+	// The card and the field now agree on the composed value.
+	card := svgText(t, get(t, h, "/card/"+talkID).Body.String())
+	if !strings.Contains(card, "Bysten Labs AS") {
+		t.Errorf("card role line = %q", card)
+	}
+	frag := get(t, h, "/talk/"+talkID).Body.String()
+	if !strings.Contains(frag, `name="title" value="Bysten Labs AS"`) {
+		t.Errorf("the role line field does not show the card's value:\n%s", frag)
+	}
+
+	// A genuinely different role line is still taken verbatim.
+	postForm(t, h, "/speaker/dario-haaland", url.Values{
+		"talk": {talkID}, "employer": {"Bysten Labs AS"},
+		"title": {"Maintainer, Co-Chair CNCF TAG"},
+	})
+	saved, _ = os.ReadFile(manifestPath)
+	if !strings.Contains(string(saved), "title: Maintainer, Co-Chair CNCF TAG") {
+		t.Errorf("a real role line edit was not stored:\n%s", saved)
 	}
 }
