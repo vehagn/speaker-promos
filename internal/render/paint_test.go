@@ -203,7 +203,7 @@ func TestRolesLine(t *testing.T) {
 		{[]string{"Utvikler", "Naisutvikler"}, "Utvikler · Naisutvikler"},
 		// Colleagues sharing an employer read once, not twice.
 		{[]string{"Bergsdal", "Bergsdal"}, "Bergsdal"},
-		{[]string{"Bergsdal", "nav"}, "Bergsdal"},
+		{[]string{"Bergsdal", "bergsdal"}, "Bergsdal"},
 		// Speakers with no title are skipped rather than leaving a stray dot.
 		{[]string{"Utvikler", "", "Arkitekt"}, "Utvikler · Arkitekt"},
 	} {

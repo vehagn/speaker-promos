@@ -61,7 +61,7 @@ func TestLoadSample(t *testing.T) {
 	if !ok {
 		t.Fatal("talk override not loaded")
 	}
-	if tk.DisplayTitle != "Nok nett" || tk.Hidden {
+	if tk.DisplayTitle != "Kort tittel" || tk.Hidden {
 		t.Errorf("talk spec = %+v", tk)
 	}
 

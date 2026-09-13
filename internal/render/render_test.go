@@ -239,10 +239,10 @@ func TestEmojiIsReportedAndStrippable(t *testing.T) {
 		t.Error("EmojiFallback should be false once emoji are stripped")
 	}
 	// Stripping must not eat the surrounding words or leave a double space.
-	if !strings.Contains(res2.SVG, "datasenter") {
+	if !strings.Contains(res2.SVG, "brødrister") {
 		t.Error("stripping removed neighbouring text")
 	}
-	if strings.Contains(svgText(t, res2.SVG), "Et  datasenter") {
+	if strings.Contains(svgText(t, res2.SVG), "Kan  skyen") {
 		t.Error("stripping left a double space")
 	}
 }

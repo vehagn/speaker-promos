@@ -169,7 +169,7 @@ func TestAbstractsAreFlattenedPlainText(t *testing.T) {
 
 	// The Norwegian workshop's abstract is assembled from a $ref mid-paragraph;
 	// resolving it is what makes the full sentence appear.
-	s, err := p.FindOne("Nok nett")
+	s, err := p.FindOne("brødrister")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +201,7 @@ func TestFindSelectorTiers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(got.Talk.Title, "Nok nett") {
+	if !strings.Contains(got.Talk.Title, "brødrister") {
 		t.Errorf("slug selector found %q", got.Talk.Title)
 	}
 
@@ -215,12 +215,12 @@ func TestFindSelectorTiers(t *testing.T) {
 	}
 
 	// Title substring, case-insensitively.
-	if _, err := p.FindOne("nok nett"); err != nil {
+	if _, err := p.FindOne("skyen kjøre"); err != nil {
 		t.Errorf("title substring: %v", err)
 	}
 
 	// Slug-form title, so Norwegian letters can be typed as ASCII.
-	if _, err := p.FindOne("nok-nett"); err != nil {
+	if _, err := p.FindOne("skyen-kjore"); err != nil {
 		t.Errorf("slug-form title: %v", err)
 	}
 

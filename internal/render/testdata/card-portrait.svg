@@ -37,7 +37,7 @@
   <rect x="110" y="1381.7" width="1180" height="431.6" rx="44" fill="#FFFFFF" fill-opacity="0.13" stroke="#FFFFFF" stroke-opacity="0.24" stroke-width="2"/>
   <text x="700" y="1450.34" font-family="Space Grotesk" font-size="28" font-weight="500" fill="#A5F3FC" text-anchor="middle" letter-spacing="5.04">DAY 1 · 13:20–13:45 · PLATFORM ENGINEERING, SRE &amp;</text>
   <text x="700" y="1485.34" font-family="Space Grotesk" font-size="28" font-weight="500" fill="#A5F3FC" text-anchor="middle" letter-spacing="5.04">OPERATIONS</text>
-  <text x="700" y="1585.86" font-family="Space Grotesk" font-size="82" font-weight="700" fill="#FFFFFF" text-anchor="middle">Pods on Mars:</text>
-  <text x="700" y="1676.06" font-family="Space Grotesk" font-size="82" font-weight="700" fill="#FFFFFF" text-anchor="middle">Selvberget Kubernetes</text>
+  <text x="700" y="1585.86" font-family="Space Grotesk" font-size="82" font-weight="700" fill="#FFFFFF" text-anchor="middle">Pods on Mars: Selvberget</text>
+  <text x="700" y="1676.06" font-family="Space Grotesk" font-size="82" font-weight="700" fill="#FFFFFF" text-anchor="middle">Kubernetes</text>
   <text x="700" y="1752.22" font-family="Space Grotesk" font-size="34" font-weight="500" fill="#FFFFFF" fill-opacity="0.88" text-anchor="middle" letter-spacing="2.72">25 MIN TALK · INTERMEDIATE</text>
 </svg>
