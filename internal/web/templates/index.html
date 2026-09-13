@@ -1,0 +1,128 @@
+{{define "index.html"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Conference.Title}} — promos</title>
+<script src="/static/htmx.min.js"></script>
+<style>
+:root {
+  --bg: #0b1020; --panel: #151c33; --panel-2: #1b2440; --line: #2a3557;
+  --ink: #eef2ff; --muted: #98a5c8; --brand: #1D4ED8; --accent: #06B6D4;
+  --warn: #fbbf24; --bad: #f87171; --ok: #34d399;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+a { color: var(--accent); }
+header {
+  position: sticky; top: 0; z-index: 10; padding: 14px 24px;
+  background: linear-gradient(90deg, var(--brand), var(--accent));
+  display: flex; gap: 20px; align-items: center; flex-wrap: wrap;
+}
+header h1 { font-size: 17px; margin: 0; font-weight: 700; }
+header .meta { font-size: 13px; opacity: .9; }
+header .spacer { flex: 1; }
+header .pill {
+  background: rgba(255,255,255,.16); padding: 4px 10px; border-radius: 999px;
+  font-size: 12px; font-family: ui-monospace, monospace;
+}
+main { padding: 24px; display: flex; flex-direction: column; gap: 24px; }
+.row {
+  display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 22px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px;
+}
+.row.hidden { opacity: .45; }
+.card img {
+  width: 100%; height: auto; display: block; border-radius: 10px;
+  background: var(--panel-2); border: 1px solid var(--line);
+}
+.card .actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+h2 { font-size: 18px; margin: 0 0 4px; line-height: 1.25; }
+.slot { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+.warn { color: var(--warn); font-size: 13px; margin: 6px 0; }
+fieldset { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin: 0 0 12px; }
+legend { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; padding: 0 6px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+input[type=text] {
+  width: 100%; padding: 7px 9px; border-radius: 7px; border: 1px solid var(--line);
+  background: var(--panel-2); color: var(--ink); font-size: 14px;
+}
+input[type=text]:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.guessed input[type=text] { border-color: var(--warn); }
+.hint { font-size: 11px; color: var(--warn); margin-top: 3px; }
+button {
+  background: var(--panel-2); color: var(--ink); border: 1px solid var(--line);
+  padding: 7px 12px; border-radius: 7px; font-size: 13px; cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--brand); border-color: transparent; }
+.check { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); }
+.check input { accent-color: var(--accent); }
+.draft { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 12px; overflow: hidden; }
+.draft header {
+  position: static; background: var(--panel-2); padding: 8px 12px; display: flex;
+  gap: 10px; align-items: center; font-size: 12px; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--muted);
+}
+.draft pre {
+  margin: 0; padding: 12px; white-space: pre-wrap; word-wrap: break-word;
+  font: 13px/1.55 ui-monospace, monospace; background: transparent;
+}
+.count { font-family: ui-monospace, monospace; }
+.count.over { color: var(--bad); font-weight: 700; }
+.meter { flex: 1; height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--ok); }
+.meter i.over { background: var(--bad); }
+.notes { margin: 0; padding: 0 12px 12px 28px; color: var(--muted); font-size: 12px; }
+.error { color: var(--bad); padding: 12px; }
+.htmx-request .card img { opacity: .4; transition: opacity .1s; }
+</style>
+</head>
+<body>
+<header>
+  <h1>{{.Conference.Title}}</h1>
+  <span class="meta">{{.Conference.DateRange}} · {{.Conference.Location}}</span>
+  <span class="spacer"></span>
+  <span class="meta">{{len .Talks}} talks</span>
+  {{range .Sizes}}<a href="/?size={{.}}"><button {{if eq . $.Size}}class="primary"{{end}}>{{.}}</button></a>{{end}}
+  <form hx-post="/export" hx-target="#export-status" hx-swap="innerHTML" style="display:inline">
+    <input type="hidden" name="size" value="{{.Size}}">
+    <button>Export all → {{.OutDir}}/</button>
+  </form>
+  <span id="export-status" class="meta"></span>
+  <span class="pill">{{.Manifest}}</span>
+</header>
+<main>
+  {{range .Talks}}{{template "talk.html" .}}{{end}}
+</main>
+<script>
+// Copy to clipboard. Everything else on the page is HTMX; this is the one
+// interaction with no server round-trip, so it is not worth a dependency.
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-copy]');
+  if (!btn) return;
+  const pre = document.getElementById(btn.dataset.copy);
+  if (!pre) return;
+  try {
+    await navigator.clipboard.writeText(pre.innerText);
+    const was = btn.textContent;
+    btn.textContent = 'Copied';
+    setTimeout(() => { btn.textContent = was; }, 1200);
+  } catch {
+    // Clipboard access needs a secure context; localhost counts, but a
+    // non-localhost host over plain HTTP does not. Select the text instead so
+    // the copy is still one keystroke away.
+    const r = document.createRange();
+    r.selectNodeContents(pre);
+    getSelection().removeAllRanges();
+    getSelection().addRange(r);
+    btn.textContent = 'Selected — press ⌘C';
+  }
+});
+</script>
+</body>
+</html>{{end}}

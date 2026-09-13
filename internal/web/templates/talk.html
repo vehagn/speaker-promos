@@ -1,0 +1,101 @@
+{{define "talk.html"}}
+<section class="row {{if .Hidden}}hidden{{end}}" id="{{.Anchor}}">
+  <div class="card">
+    <img src="{{.CardURL}}" alt="promo card for {{.Session.Talk.Title}}" loading="lazy">
+    <div class="actions">
+      <a href="/download/{{.Session.Talk.ID}}?size={{.Size}}"><button>Download SVG</button></a>
+      <a href="{{.CardURL}}" target="_blank"><button>Open full size</button></a>
+    </div>
+    {{range .Warnings}}<p class="warn">⚠ {{.}}</p>{{end}}
+  </div>
+
+  <div class="detail">
+    <h2>{{.Session.Talk.Title}}</h2>
+    <p class="slot">
+      Day {{.Session.Day}} · {{.Session.TimeRange}} · {{shortTrack .Session.Track}}
+      {{with .Session.Talk.FormatLabel}} · {{.}}{{end}}
+    </p>
+
+    {{/* Talk-level overrides. hx-include picks up the hidden checkbox too. */}}
+    <fieldset>
+      <legend>Card</legend>
+      <form hx-post="/talk/{{.Session.Talk.ID}}" hx-target="#{{.Anchor}}" hx-swap="outerHTML">
+        <input type="hidden" name="size" value="{{.Size}}">
+        <div class="grid">
+          <div>
+            <label for="title-{{.Anchor}}">Display title (blank = as submitted)</label>
+            <input type="text" id="title-{{.Anchor}}" name="displayTitle"
+                   value="{{.Talk.DisplayTitle}}" placeholder="{{.Session.Talk.Title}}"
+                   hx-post="/talk/{{.Session.Talk.ID}}" hx-target="#{{.Anchor}}"
+                   hx-swap="outerHTML" hx-trigger="change" hx-include="closest form">
+          </div>
+          <div>
+            <label>Exclude from bulk renders</label>
+            <span class="check">
+              <input type="checkbox" name="hidden" value="1" {{if .Hidden}}checked{{end}}
+                     hx-post="/talk/{{.Session.Talk.ID}}" hx-target="#{{.Anchor}}"
+                     hx-swap="outerHTML" hx-include="closest form">
+              hidden
+            </span>
+          </div>
+        </div>
+      </form>
+    </fieldset>
+
+    {{range .Speakers}}
+    <fieldset class="{{if .Guessed}}guessed{{end}}">
+      <legend>{{.Speaker.Name}}</legend>
+      {{/* Every input posts on change, so there is no save button and nothing
+           to lose. The manifest is written on each one. */}}
+      <form hx-post="/speaker/{{.Speaker.Slug}}" hx-target="#{{$.Anchor}}" hx-swap="outerHTML"
+            hx-trigger="change from:find input" hx-include="closest form">
+        <input type="hidden" name="talk" value="{{$.Session.Talk.ID}}">
+        <input type="hidden" name="size" value="{{$.Size}}">
+        <div class="grid">
+          <div>
+            <label>Employer</label>
+            <input type="text" name="employer" value="{{.Override.Employer}}"
+                   placeholder="{{with .Role.Employer}}{{.}}{{else}}unknown{{end}}">
+            {{if .Guessed}}<p class="hint">guessed from “{{.Speaker.Title}}”</p>{{end}}
+          </div>
+          <div>
+            <label>Job title</label>
+            <input type="text" name="job" value="{{.Override.Job}}" placeholder="{{.Role.Job}}">
+          </div>
+          <div>
+            <label>LinkedIn</label>
+            <input type="text" name="linkedin" value="{{.Override.Links.LinkedIn}}"
+                   placeholder="{{with .Links.LinkedIn}}{{.}}{{else}}none found{{end}}">
+          </div>
+          <div>
+            <label>Bluesky</label>
+            <input type="text" name="bluesky" value="{{.Override.Links.Bluesky}}"
+                   placeholder="{{with .Links.Bluesky}}{{.}}{{else}}none found{{end}}">
+          </div>
+          <div>
+            <label>X</label>
+            <input type="text" name="x" value="{{.Override.Links.X}}"
+                   placeholder="{{with .Links.X}}{{.}}{{else}}none found{{end}}">
+          </div>
+        </div>
+      </form>
+    </fieldset>
+    {{end}}
+
+    {{range .Drafts}}
+    <div class="draft">
+      <header>
+        <span>{{.Draft.Platform}}</span>
+        <span class="count {{if .Over}}over{{end}}">{{.Count}}</span>
+        {{if .Limit}}<span class="meter"><i class="{{if .Over}}over{{end}}" style="width:{{.Percent}}%"></i></span>{{end}}
+        <button type="button" data-copy="copy-{{$.Anchor}}-{{.Draft.Platform}}">Copy</button>
+      </header>
+      <pre id="copy-{{$.Anchor}}-{{.Draft.Platform}}">{{.Draft.Text}}</pre>
+      {{with .Draft.Notes}}
+      <ul class="notes">{{range .}}<li>{{.}}</li>{{end}}</ul>
+      {{end}}
+    </div>
+    {{end}}
+  </div>
+</section>
+{{end}}

@@ -20,6 +20,7 @@ Usage:
   promo list [flags]                 index the program
   promo svg  [flags] <selector>...   render promo SVGs
   promo post [flags] <selector>      draft LinkedIn / Bluesky copy
+  promo serve [flags]                preview every card in a browser and edit
   promo fonts install                install the brand fonts locally
   promo theme dump                   print the built-in theme as YAML
 
@@ -53,6 +54,8 @@ func run(args []string) error {
 		return cmdSVG(rest)
 	case "post":
 		return cmdPost(rest)
+	case "serve":
+		return cmdServe(rest)
 	case "fonts":
 		return cmdFonts(rest)
 	case "theme":
