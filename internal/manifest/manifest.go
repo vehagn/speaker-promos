@@ -59,8 +59,25 @@ type Metadata struct {
 // and job it guessed out of free text, and the handles it scraped from a
 // speaker page.
 type SpeakerSpec struct {
+	// Name replaces the speaker's name on the card and in the copy. The CMS is
+	// where people typed their own name and accents get lost — "Aurelie" for
+	// "Aurélie" — and there is nowhere else to fix that.
+	//
+	// The slug is NOT derived from this: it stays the speaker's identity, so
+	// correcting a name does not rename the export folder or change what
+	// `promo list` tells you to type.
+	Name     string `yaml:"name,omitempty"`
 	Employer string `yaml:"employer,omitempty"`
 	Job      string `yaml:"job,omitempty"`
+	// Title sets the card's role line verbatim, instead of composing it from
+	// Job and Employer.
+	//
+	// It exists because plenty of real titles do not fit "<job> at <employer>":
+	// "Maintainer, Principal Open source Architect, Co-Chair CNCF TAG
+	// Infrastructure" is one from the 2026 program. Employer still drives what
+	// the POST says, so setting Title alone changes the card but leaves the
+	// copy guessing — set both when the guess is wrong.
+	Title string `yaml:"title,omitempty"`
 	// Image replaces the speaker's photo. Five of the 2026 speakers have none
 	// and get a monogram instead, and a CMS photo is sometimes just bad.
 	//
@@ -82,7 +99,8 @@ type Links struct {
 func (l Links) empty() bool { return l == Links{} }
 
 func (s SpeakerSpec) empty() bool {
-	return s.Employer == "" && s.Job == "" && s.Image == "" && s.Links.empty()
+	return s.Name == "" && s.Employer == "" && s.Job == "" &&
+		s.Title == "" && s.Image == "" && s.Links.empty()
 }
 
 // TalkSpec overrides how a talk is presented.
@@ -199,7 +217,7 @@ func (s *Set) addDocument(node *yaml.Node) error {
 
 	switch doc.Kind {
 	case KindSpeakerOverride:
-		if err := checkFields(&doc.Spec, "employer", "job", "image", "links"); err != nil {
+		if err := checkFields(&doc.Spec, "name", "employer", "job", "title", "image", "links"); err != nil {
 			return err
 		}
 		var spec SpeakerSpec
@@ -494,15 +512,20 @@ func (s *Set) Rewrite(sess cnd.Session) cnd.Session {
 		if !ok {
 			continue
 		}
+		name := strings.TrimSpace(spec.Name)
 		title := spec.RoleTitle()
 		image := s.resolveImage(spec.Image)
+		changesName := name != "" && name != sp.Name
 		changesTitle := title != "" && title != sp.Title
 		changesImage := image != "" && image != sp.Image
-		if !changesTitle && !changesImage {
+		if !changesName && !changesTitle && !changesImage {
 			continue
 		}
 		if speakers == nil {
 			speakers = slices.Clone(sess.Talk.Speakers)
+		}
+		if changesName {
+			speakers[i].Name = name
 		}
 		if changesTitle {
 			speakers[i].Title = title
@@ -523,6 +546,10 @@ func (s *Set) Rewrite(sess cnd.Session) cnd.Session {
 // upstream value is kept.
 func (spec SpeakerSpec) RoleTitle() string {
 	switch {
+	// An explicit title wins: it is the escape hatch for roles that do not fit
+	// the "<job> at <employer>" shape at all.
+	case spec.Title != "":
+		return spec.Title
 	case spec.Job != "" && spec.Employer != "":
 		return spec.Job + " at " + spec.Employer
 	case spec.Job != "":

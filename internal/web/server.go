@@ -229,8 +229,10 @@ func (s *Server) handleSpeakerUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	spec := manifest.SpeakerSpec{
+		Name:     strings.TrimSpace(r.FormValue("name")),
 		Employer: strings.TrimSpace(r.FormValue("employer")),
 		Job:      strings.TrimSpace(r.FormValue("job")),
+		Title:    strings.TrimSpace(r.FormValue("title")),
 		Image:    strings.TrimSpace(r.FormValue("image")),
 		Links: manifest.Links{
 			LinkedIn: strings.TrimSpace(r.FormValue("linkedin")),
@@ -419,12 +421,20 @@ func (s *Server) buildViewLocked(sess cnd.Session, size string) talkView {
 		role := overrides.RoleFor(sp)
 		override, _ := set.Speaker(sp.Slug)
 
-		// The photo check runs against the REWRITTEN speaker, since an image
-		// override is applied there and is exactly what this answer is about.
-		// Rewrite preserves order and length, so the indices line up.
-		photoOf := sp
+		// Two versions of the same speaker, used for different things.
+		//
+		// The FORM shows the original: its placeholders are what the CMS says,
+		// which is what an override is being compared against.
+		//
+		// Everything that describes the OUTPUT — the photo check and the draft
+		// copy — uses the rewritten speaker, because that is who the card and
+		// the post are about. Building the copy from the original left a
+		// corrected name on the card but not in the draft beside it, which is
+		// exactly the drift this view model exists to prevent. Rewrite
+		// preserves order and length, so the indices line up.
+		rendered := sp
 		if i < len(rewritten.Talk.Speakers) {
-			photoOf = rewritten.Talk.Speakers[i]
+			rendered = rewritten.Talk.Speakers[i]
 		}
 
 		view.Speakers = append(view.Speakers, speakerView{
@@ -433,9 +443,9 @@ func (s *Server) buildViewLocked(sess cnd.Session, size string) talkView {
 			Links:    links,
 			Override: override,
 			Guessed:  role.Guessed,
-			HasPhoto: s.renderer.HasPhoto(photoOf),
+			HasPhoto: s.renderer.HasPhoto(rendered),
 		})
-		in.Speakers = append(in.Speakers, post.Speaker{Speaker: sp, Role: role, Links: links})
+		in.Speakers = append(in.Speakers, post.Speaker{Speaker: rendered, Role: role, Links: links})
 	}
 
 	view.Language = in.Language.Resolve(rewritten.Talk.Title, rewritten.Talk.Abstract)

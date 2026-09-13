@@ -107,6 +107,9 @@ out/d1-0900-dario-haaland-kan-skyen-kjore-pa-en-brodrister/
 `linkedin.txt` and `bluesky.txt` hold the post and nothing else, so nothing about guessed
 employers can be pasted into a real post by accident.
 
+Each speaker's `SpeakerOverride` comes pre-filled with their name, so correcting it is
+editing a line rather than knowing the field exists.
+
 `promo.yaml` is two things in one file. A `TalkInfo` object records everything the tool knew
 when it produced the folder — the conference, the slot, track, format, level, topics,
 abstract, and each speaker's resolved employer, handles, profile URL and whether the card
@@ -278,6 +281,7 @@ Editing a field saves it to the manifest immediately and re-renders that one car
 is no save button, and nothing to lose if the browser closes. `git diff promos.yaml` is
 the record; `git checkout promos.yaml` is the undo.
 
+- **Name** and **Role line** correct what the CMS has, per speaker.
 - **Photo** gives a speaker a picture when they have none, or replaces a poor one.
 - **Copy language** overrides the detected language; *auto* names what it detected.
 - **Display title** shortens a title on the card without touching the program.
@@ -302,8 +306,10 @@ kind: SpeakerOverride
 metadata:
   name: dario-haaland             # speaker slug, as printed by `promo list`
 spec:
+  name: Aurélie Vache             # fixes what the CMS lost; the slug stays put
   employer: Bysten Labs
   job: Infrastructure Engineer
+  title: Maintainer, Co-Chair CNCF TAG   # verbatim role line, beats job+employer
   image: photos/dario.jpg         # URL, or a path beside this manifest
   links:
     linkedin: https://www.linkedin.com/in/dario
@@ -321,6 +327,20 @@ spec:
 
 An overridden employer stops being reported as a guess, and reaches the card's role line as
 well as the copy — the card saying the wrong thing is usually why you are correcting it.
+
+### Names and role lines
+
+`name:` replaces the speaker's name on the card and in the copy. The CMS is where people
+typed their own name, so accents go missing — `Aurelie` for `Aurélie` — and there is
+nowhere else to fix it. The slug is **not** derived from it: it stays the speaker's
+identity, so correcting a name does not rename the export folder or change what
+`promo list` tells you to type.
+
+`title:` sets the card's role line verbatim instead of composing it from `job` and
+`employer`. Real titles often do not fit `<job> at <employer>` — *"Maintainer, Principal
+Open source Architect, Co-Chair CNCF TAG Infrastructure"* is one from the 2026 program.
+`employer:` still drives what the **post** says, so a `title:` on its own changes the card
+and leaves the copy guessing; set both when the guess is also wrong.
 
 ### Photos
 

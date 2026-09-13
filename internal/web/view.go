@@ -57,6 +57,15 @@ type speakerView struct {
 	HasPhoto bool
 }
 
+// DisplayName is the name the card shows: the override when there is one, so
+// the form's heading matches the artwork rather than the CMS.
+func (v speakerView) DisplayName() string {
+	if v.Override.Name != "" {
+		return v.Override.Name
+	}
+	return v.Speaker.Name
+}
+
 // draftView is one platform's copy, with its length budget resolved.
 type draftView struct {
 	Draft post.Draft

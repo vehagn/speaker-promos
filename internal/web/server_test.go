@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/xml"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -440,4 +441,83 @@ func TestConcurrentEditsAreSerialised(t *testing.T) {
 	if sp, ok := set.Speaker("dario-haaland"); !ok || sp.Employer != "Corp" {
 		t.Errorf("speaker override = %+v, ok=%v", sp, ok)
 	}
+}
+
+// Regression: the draft copy was built from the ORIGINAL speakers while the
+// card used the rewritten ones, so a corrected name appeared on the card but
+// not in the draft sitting beside it.
+func TestCorrectedNameReachesBothCardAndCopy(t *testing.T) {
+	_, h, manifestPath := newTestServer(t)
+
+	rec := postForm(t, h, "/speaker/dario-haaland", url.Values{
+		"talk": {talkID},
+		"name": {"Dárió Håaland"},
+		// A role line that does not fit "<job> at <employer>" at all.
+		"title": {"Maintainer, Co-Chair CNCF TAG Infrastructure"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d\n%s", rec.Code, rec.Body)
+	}
+	frag := rec.Body.String()
+
+	// The draft copy names the corrected speaker.
+	if !strings.Contains(frag, "Dárió Håaland") {
+		t.Errorf("fragment does not use the corrected name:\n%s", frag)
+	}
+	if strings.Contains(svgText(t, get(t, h, "/card/"+talkID).Body.String()), "Dario Haaland") {
+		t.Error("the card still shows the uncorrected name")
+	}
+
+	// The form keeps the CMS value as its placeholder, since that is what an
+	// override is being compared against.
+	if !strings.Contains(frag, `placeholder="Dario Haaland"`) {
+		t.Error("the form should still show the original name as a placeholder")
+	}
+
+	// The card's role line is the verbatim title.
+	card := svgText(t, get(t, h, "/card/"+talkID).Body.String())
+	if !strings.Contains(card, "Maintainer, Co-Chair CNCF TAG Infrastructure") {
+		t.Errorf("card role line = %q", card)
+	}
+
+	saved, _ := os.ReadFile(manifestPath)
+	for _, want := range []string{"name: Dárió Håaland", "title: Maintainer,"} {
+		if !strings.Contains(string(saved), want) {
+			t.Errorf("manifest missing %q:\n%s", want, saved)
+		}
+	}
+}
+
+// svgText returns a card's visible text with lines joined by spaces, so an
+// assertion does not depend on where autofit happened to wrap. The <style>
+// block is skipped so embedded font CSS does not pollute the result.
+func svgText(t *testing.T, doc string) string {
+	t.Helper()
+	dec := xml.NewDecoder(strings.NewReader(doc))
+	var parts []string
+	inStyle := false
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			break
+		}
+		switch e := tok.(type) {
+		case xml.StartElement:
+			if e.Name.Local == "style" {
+				inStyle = true
+			}
+		case xml.EndElement:
+			if e.Name.Local == "style" {
+				inStyle = false
+			}
+		case xml.CharData:
+			if inStyle {
+				continue
+			}
+			if v := strings.TrimSpace(string(e)); v != "" {
+				parts = append(parts, v)
+			}
+		}
+	}
+	return strings.Join(parts, " ")
 }

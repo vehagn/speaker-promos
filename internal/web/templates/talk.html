@@ -54,7 +54,7 @@
 
     {{range .Speakers}}
     <fieldset class="{{if .Guessed}}guessed{{end}}">
-      <legend>{{.Speaker.Name}}</legend>
+      <legend>{{.DisplayName}}</legend>
       {{/* Every input posts on change, so there is no save button and nothing
            to lose. The manifest is written on each one. */}}
       <form hx-post="/speaker/{{.Speaker.Slug}}" hx-target="#{{$.Anchor}}" hx-swap="outerHTML"
@@ -62,6 +62,11 @@
         <input type="hidden" name="talk" value="{{$.Session.Talk.ID}}">
         <input type="hidden" name="size" value="{{$.Size}}">
         <div class="grid">
+          <div>
+            <label>Name</label>
+            <input type="text" name="name" value="{{.Override.Name}}"
+                   placeholder="{{.Speaker.Name}}">
+          </div>
           <div>
             <label>Employer</label>
             <input type="text" name="employer" value="{{.Override.Employer}}"
@@ -71,6 +76,11 @@
           <div>
             <label>Job title</label>
             <input type="text" name="job" value="{{.Override.Job}}" placeholder="{{.Role.Job}}">
+          </div>
+          <div>
+            <label>Role line (verbatim)</label>
+            <input type="text" name="title" value="{{.Override.Title}}"
+                   placeholder="{{.Speaker.Title}}">
           </div>
           <div class="{{if not .HasPhoto}}missing{{end}}">
             <label>Photo {{if not .HasPhoto}}— none, showing initials{{end}}</label>

@@ -21,6 +21,10 @@ const bundleHeader = `# Everything that produced the cards in this folder.
 # otherwise the guess the tool made. Change one and pass this file with
 # --manifest to apply it.
 #
+#   name:   the CMS is where people typed their own name, so accents go
+#           missing. Correcting it here does not rename this folder.
+#   title:  sets the card's role line verbatim, for roles that do not fit
+#           "<job> at <employer>". Employer still drives what the post says.
 #   image:  a speaker with no photo renders a monogram. Point this at a URL or
 #           at a file next to this manifest to give them one.
 `
@@ -154,6 +158,13 @@ func (s *Set) ForSession(info SessionInfo, overrides post.Overrides) ([]byte, er
 			continue
 		}
 		spec := s.speakers[sp.Slug]
+		// Pre-filled so the name is a line you can correct rather than a field
+		// you have to know exists. Title is deliberately left out: it is an
+		// escape hatch, and pre-filling it would freeze the composed
+		// job-and-employer line and stop those two from doing anything.
+		if spec.Name == "" {
+			spec.Name = sp.Name
+		}
 		if spec.Employer == "" && spec.Job == "" {
 			// Pre-fill from what the card used, so the file is editable rather
 			// than blank. RoleFor resolves the override first and falls back to

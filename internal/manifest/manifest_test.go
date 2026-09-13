@@ -473,3 +473,105 @@ func TestImageOnlyOverrideRoundTrips(t *testing.T) {
 		t.Errorf("reloaded = %+v, ok=%v", spec, ok)
 	}
 }
+
+// A name is typed by the speaker into a CMS, so accents go missing. Correcting
+// it must reach the card and the copy but must NOT change the slug, which is
+// the speaker's identity and drives folder names and selectors.
+func TestNameOverrideDoesNotChangeIdentity(t *testing.T) {
+	path := tempPath(t)
+	set := New(path)
+	if err := set.SetSpeaker("aurelie-vache", SpeakerSpec{Name: "Aurélie Vache"}); err != nil {
+		t.Fatal(err)
+	}
+	sess := cnd.Session{Day: 2, StartTime: "15:30", Talk: cnd.Talk{
+		ID: "t", Title: "Understanding Kubernetes",
+		Speakers: []cnd.Speaker{{Slug: "aurelie-vache", Name: "Aurelie Vache"}},
+	}}
+	before := sess.FileStem()
+
+	got := set.Rewrite(sess)
+	if got.Talk.Speakers[0].Name != "Aurélie Vache" {
+		t.Errorf("name = %q", got.Talk.Speakers[0].Name)
+	}
+	if got.Talk.Speakers[0].Slug != "aurelie-vache" {
+		t.Errorf("slug changed to %q", got.Talk.Speakers[0].Slug)
+	}
+	if after := got.FileStem(); after != before {
+		t.Errorf("file stem changed from %q to %q", before, after)
+	}
+}
+
+// Plenty of real titles do not fit "<job> at <employer>", so an explicit title
+// sets the role line verbatim and wins over both.
+func TestTitleOverrideWinsOverJobAndEmployer(t *testing.T) {
+	verbatim := "Maintainer, Principal Open source Architect, Co-Chair CNCF TAG Infrastructure"
+	for _, tc := range []struct {
+		spec SpeakerSpec
+		want string
+	}{
+		{SpeakerSpec{Title: verbatim}, verbatim},
+		{SpeakerSpec{Title: verbatim, Job: "Engineer", Employer: "Vestbit"}, verbatim},
+		{SpeakerSpec{Job: "Engineer", Employer: "Vestbit"}, "Engineer at Vestbit"},
+		{SpeakerSpec{Name: "Only a name"}, ""},
+	} {
+		if got := tc.spec.RoleTitle(); got != tc.want {
+			t.Errorf("RoleTitle(%+v) = %q, want %q", tc.spec, got, tc.want)
+		}
+	}
+
+	// Employer still drives what the POST names, so a title alone changes the
+	// card without silencing the employer guess.
+	path := tempPath(t)
+	set := New(path)
+	if err := set.SetSpeaker("a", SpeakerSpec{Title: verbatim}); err != nil {
+		t.Fatal(err)
+	}
+	role := set.Overrides().RoleFor(cnd.Speaker{Slug: "a", Title: "Dev at Acme"})
+	if role.Employer != "Acme" {
+		t.Errorf("employer = %q, want it still guessed from upstream", role.Employer)
+	}
+	if !role.Guessed {
+		t.Error("a title-only override should leave the employer marked as guessed")
+	}
+}
+
+// A name-only or title-only override is a real override and must survive a
+// save/load cycle rather than being pruned as empty.
+func TestNameAndTitleOnlyOverridesRoundTrip(t *testing.T) {
+	for _, spec := range []SpeakerSpec{
+		{Name: "Aurélie Vache"},
+		{Title: "Tech Lead, Platform"},
+	} {
+		path := tempPath(t)
+		set := New(path)
+		if err := set.SetSpeaker("a", spec); err != nil {
+			t.Fatal(err)
+		}
+		reloaded, err := Load(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, ok := reloaded.Speaker("a")
+		if !ok || got != spec {
+			t.Errorf("reloaded %+v as %+v (ok=%v)", spec, got, ok)
+		}
+	}
+}
+
+func TestSpeakerSpecRejectsUnknownFields(t *testing.T) {
+	path := tempPath(t)
+	body := "apiVersion: " + APIVersion + "\nkind: SpeakerOverride\nmetadata:\n  name: a\nspec:\n  nmae: x\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("want an error for a misspelled field")
+	}
+	// The error must list the fields that now exist, name and title included.
+	for _, want := range []string{"name", "title", "employer", "job", "image", "links"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q should list %q", err, want)
+		}
+	}
+}
