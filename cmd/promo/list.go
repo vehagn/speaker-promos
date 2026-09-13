@@ -17,7 +17,7 @@ func cmdList(args []string) error {
 	day := fs.Int("day", 0, "show only this conference day (1-based)")
 	speaker := fs.String("speaker", "", "show only talks by this speaker (slug or name substring)")
 	asJSON := fs.Bool("json", false, "emit JSON instead of a table")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 

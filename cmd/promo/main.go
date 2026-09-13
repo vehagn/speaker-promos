@@ -48,6 +48,8 @@ func run(args []string) error {
 	switch cmd {
 	case "list":
 		return cmdList(rest)
+	case "svg":
+		return cmdSVG(rest)
 	case "fonts":
 		return cmdFonts(rest)
 	case "theme":
@@ -139,4 +141,54 @@ func truncate(s string, n int) string {
 		return string(r[:n])
 	}
 	return strings.TrimRight(string(r[:n-1]), " ") + "…"
+}
+
+// parseFlags parses args allowing flags to appear after positional arguments.
+//
+// Go's flag package stops parsing at the first non-flag argument, so
+// `promo svg gunvor-rønning --out promos/` would silently treat "--out" and
+// "promos/" as selectors. That word order is the natural one and every other
+// modern CLI accepts it, so the arguments are permuted first: flags (with their
+// values) are hoisted ahead of the positionals.
+func parseFlags(fs *flag.FlagSet, args []string) error {
+	var flags, positional []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+
+		// A bare "--" ends flag parsing; everything after it is positional.
+		if a == "--" {
+			positional = append(positional, args[i+1:]...)
+			break
+		}
+		if len(a) < 2 || a[0] != '-' {
+			positional = append(positional, a)
+			continue
+		}
+
+		flags = append(flags, a)
+		name, inlineValue := cutFlagValue(strings.TrimLeft(a, "-"))
+		if inlineValue {
+			continue
+		}
+		// A non-boolean flag takes the following argument as its value, so that
+		// argument must travel with it rather than becoming a positional.
+		if f := fs.Lookup(name); f != nil && !isBoolFlag(f) && i+1 < len(args) {
+			i++
+			flags = append(flags, args[i])
+		}
+	}
+	return fs.Parse(append(flags, positional...))
+}
+
+// cutFlagValue splits "name=value" and reports whether a value was inline.
+func cutFlagValue(s string) (string, bool) {
+	if name, _, ok := strings.Cut(s, "="); ok {
+		return name, true
+	}
+	return s, false
+}
+
+func isBoolFlag(f *flag.Flag) bool {
+	b, ok := f.Value.(interface{ IsBoolFlag() bool })
+	return ok && b.IsBoolFlag()
 }

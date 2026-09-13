@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1400" height="2100" viewBox="0 0 1400 2100">
+  <style>
+    @font-face {
+      font-family: "Space Grotesk";
+      font-weight: 500;
+      font-style: normal;
+      src: url("data:font/ttf;base64,<155552 base64 chars elided>") format("truetype");
+    }
+    @font-face {
+      font-family: "Space Grotesk";
+      font-weight: 700;
+      font-style: normal;
+      src: url("data:font/ttf;base64,<154744 base64 chars elided>") format("truetype");
+    }
+  </style>
+  <defs>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1D4ED8"/>
+      <stop offset="1" stop-color="#06B6D4"/>
+    </linearGradient>
+  </defs>
+  <rect width="1400" height="2100" fill="url(#brand)"/>
+  <g fill="#FFFFFF">
+    <circle cx="1232" cy="126" r="420" opacity="0.07"/>
+    <circle cx="70" cy="882" r="364" opacity="0.06"/>
+    <circle cx="1330" cy="1638" r="476" opacity="0.05"/>
+  </g>
+  <svg x="390" y="110" width="620" height="170.9" viewBox="0 0 2710 747" preserveAspectRatio="xMidYMid meet"><rect width="2710" height="747" fill="#fff"/></svg>
+  <text x="700" y="343.82" font-family="Space Grotesk" font-size="34" font-weight="500" fill="#FFFFFF" fill-opacity="0.88" text-anchor="middle" letter-spacing="2.72">26–27 OCTOBER 2026 · BERGEN, NORWAY</text>
+  <defs><clipPath id="photo-sindre-vika1"><rect x="380" y="410.1" width="640" height="640" rx="44"/></clipPath></defs>
+  <rect x="380" y="410.1" width="640" height="640" rx="44" fill="#FFFFFF" fill-opacity="0.13"/>
+  <text x="700" y="804.08" font-family="Space Grotesk" font-size="217.6" font-weight="700" fill="#FFFFFF" fill-opacity="0.85" text-anchor="middle" letter-spacing="4.35">VH</text>
+  <rect x="380" y="410.1" width="640" height="640" rx="44" fill="none" stroke="#FFFFFF" stroke-opacity="0.3" stroke-width="6"/>
+  <text x="700" y="1166.06" font-family="Space Grotesk" font-size="92" font-weight="700" fill="#FFFFFF" text-anchor="middle">Sindre Vik</text>
+  <text x="700" y="1223.66" font-family="Space Grotesk" font-size="42" font-weight="500" fill="#FFFFFF" fill-opacity="0.88" text-anchor="middle">Platform Engineer at Fjordstack</text>
+  <text x="700" y="1976.56" font-family="Space Grotesk" font-size="32" font-weight="500" fill="#FFFFFF" fill-opacity="0.88" text-anchor="middle" letter-spacing="1.28">2026.cloudnativedays.no</text>
+  <rect x="110" y="1381.7" width="1180" height="431.6" rx="44" fill="#FFFFFF" fill-opacity="0.13" stroke="#FFFFFF" stroke-opacity="0.24" stroke-width="2"/>
+  <text x="700" y="1450.34" font-family="Space Grotesk" font-size="28" font-weight="500" fill="#A5F3FC" text-anchor="middle" letter-spacing="5.04">DAY 1 · 13:20–13:45 · PLATFORM ENGINEERING, SRE &amp;</text>
+  <text x="700" y="1485.34" font-family="Space Grotesk" font-size="28" font-weight="500" fill="#A5F3FC" text-anchor="middle" letter-spacing="5.04">OPERATIONS</text>
+  <text x="700" y="1585.86" font-family="Space Grotesk" font-size="82" font-weight="700" fill="#FFFFFF" text-anchor="middle">Pods on Mars:</text>
+  <text x="700" y="1676.06" font-family="Space Grotesk" font-size="82" font-weight="700" fill="#FFFFFF" text-anchor="middle">Selvberget Kubernetes</text>
+  <text x="700" y="1752.22" font-family="Space Grotesk" font-size="34" font-weight="500" fill="#FFFFFF" fill-opacity="0.88" text-anchor="middle" letter-spacing="2.72">25 MIN TALK · INTERMEDIATE</text>
+</svg>

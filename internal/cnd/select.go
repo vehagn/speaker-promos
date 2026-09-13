@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 // Find returns the sessions matching a selector.
@@ -25,6 +27,17 @@ func (p Program) Find(selector string) []Session {
 		func(s Session) bool {
 			for _, sp := range s.Talk.Speakers {
 				if strings.EqualFold(sp.Slug, q) {
+					return true
+				}
+			}
+			return false
+		},
+		// Speaker slugs keep their Norwegian letters upstream
+		// ("ylva-sørgard"), and `list` prints them verbatim, so the
+		// ASCII form a user can actually type has to match too.
+		func(s Session) bool {
+			for _, sp := range s.Talk.Speakers {
+				if slugify(sp.Slug) == slugify(q) || slugify(sp.Name) == slugify(q) {
 					return true
 				}
 			}
@@ -75,29 +88,31 @@ func (p Program) FindOne(selector string) (Session, error) {
 
 var nonSlug = regexp.MustCompile(`[^a-z0-9]+`)
 
-// slugify reduces text to a lowercase ASCII slug, transliterating the Norwegian
-// letters so that "Håvard" and "Havard" both match.
+// slugify reduces text to a lowercase ASCII slug.
+//
+// Accented letters are decomposed and stripped of their combining marks, so
+// "Zoë" becomes "zoe" rather than "zo-" — these slugs end up in
+// filenames, and a speaker's name should still be readable in one.
+//
+// æ, ø and å are handled explicitly because they are distinct letters rather
+// than accented vowels: Unicode does not decompose them, so without this they
+// would be dropped entirely and "Håvard" would slug to "hvard".
 func slugify(s string) string {
 	var b strings.Builder
-	for _, r := range strings.ToLower(s) {
-		switch r {
-		case 'æ':
+	for _, r := range norm.NFD.String(strings.ToLower(s)) {
+		switch {
+		case r == 'æ':
 			b.WriteString("ae")
-		case 'ø':
+		case r == 'ø':
 			b.WriteString("o")
-		case 'å':
+		case r == 'å':
 			b.WriteString("a")
-		default:
-			if r > unicode.MaxASCII {
-				// Strip combining marks so "é" becomes "e" rather than vanishing.
-				if d := unicode.ToLower(r); d < unicode.MaxASCII {
-					b.WriteRune(d)
-					continue
-				}
-				b.WriteByte('-')
-				continue
-			}
+		case unicode.Is(unicode.Mn, r):
+			// A combining mark left over from decomposition.
+		case r <= unicode.MaxASCII:
 			b.WriteRune(r)
+		default:
+			b.WriteByte('-')
 		}
 	}
 	return strings.Trim(nonSlug.ReplaceAllString(b.String(), "-"), "-")

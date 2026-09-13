@@ -67,9 +67,11 @@ geometry:
         opacity: 1
       name:
         face: heading
-        minSize: 58
+        minSize: 46
         maxSize: 92
-        maxLines: 2
+        # Three lines because a four-speaker talk joins into a long string
+        # ("Astrid Sæther, Espen Kvalheim, Ines Duarte and Halvard Bjørnsen").
+        maxLines: 3
         lineHeight: 1.05
         color: text
         opacity: 1
@@ -83,10 +85,13 @@ geometry:
         opacity: 1
       eyebrow:
         face: body
-        minSize: 28
+        # Allowed to shrink and wrap: the slot line carries the track name, and
+        # the 2026 tracks include "Security, Governance and Compliance", which
+        # does not fit on one tracked line at full size.
+        minSize: 22
         maxSize: 28
-        maxLines: 1
-        lineHeight: 1.2
+        maxLines: 2
+        lineHeight: 1.25
         tracking: 0.18
         uppercase: true
         color: accent
@@ -132,9 +137,9 @@ geometry:
         opacity: 1
       name:
         face: heading
-        minSize: 28
+        minSize: 22
         maxSize: 42
-        maxLines: 2
+        maxLines: 3
         lineHeight: 1.05
         color: text
         opacity: 1
@@ -148,10 +153,10 @@ geometry:
         opacity: 1
       eyebrow:
         face: body
-        minSize: 18
+        minSize: 13
         maxSize: 18
-        maxLines: 1
-        lineHeight: 1.2
+        maxLines: 2
+        lineHeight: 1.25
         tracking: 0.16
         uppercase: true
         color: accent

@@ -322,3 +322,21 @@ func TestSlugifyNorwegian(t *testing.T) {
 		}
 	}
 }
+
+// Speaker slugs keep Norwegian letters upstream and `list` prints them
+// verbatim, so the ASCII form a user can type must select the same talk.
+func TestFindMatchesTransliteratedSpeakerSlug(t *testing.T) {
+	p := fixture(t)
+
+	exact, err := p.FindOne("ylva-sørgard")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ascii, err := p.FindOne("ylva-sorgard")
+	if err != nil {
+		t.Fatalf("ASCII form of a Norwegian slug did not match: %v", err)
+	}
+	if ascii.Talk.ID != exact.Talk.ID {
+		t.Errorf("ASCII selector found %q, want %q", ascii.Talk.Title, exact.Talk.Title)
+	}
+}
