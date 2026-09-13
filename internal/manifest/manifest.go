@@ -25,6 +25,7 @@ import (
 	"sync"
 
 	"github.com/vehagn/speaker-promos/internal/cnd"
+	"github.com/vehagn/speaker-promos/internal/lang"
 	"github.com/vehagn/speaker-promos/internal/post"
 	"gopkg.in/yaml.v3"
 )
@@ -243,7 +244,7 @@ func (s *Set) addDocument(node *yaml.Node) error {
 		}
 		// Validated on load so a typo is an error here rather than silently
 		// falling back to English in every generated post.
-		if _, err := post.ParseLanguage(spec.Language); err != nil {
+		if _, err := lang.ParseLanguage(spec.Language); err != nil {
 			return fmt.Errorf("line %d: %s/%s: %w", doc.Spec.Line, doc.Kind, doc.Metadata.Name, err)
 		}
 		if _, dup := s.talks[doc.Metadata.Name]; dup {
@@ -592,17 +593,17 @@ func (s *Set) resolveImage(image string) string {
 }
 
 // LanguageFor returns the copy language for a talk: the override when one is
-// set, otherwise post.Auto so the caller's own default or detection applies.
-func (s *Set) LanguageFor(talkID string) post.Language {
+// set, otherwise lang.Auto so the caller's own default or detection applies.
+func (s *Set) LanguageFor(talkID string) lang.Language {
 	spec, ok := s.Talk(talkID)
 	if !ok || spec.Language == "" {
-		return post.Auto
+		return lang.Auto
 	}
 	// Already validated at load; a bad value here can only come from a
 	// programmatic Set and resolves to Auto rather than failing a render.
-	lang, err := post.ParseLanguage(spec.Language)
+	language, err := lang.ParseLanguage(spec.Language)
 	if err != nil {
-		return post.Auto
+		return lang.Auto
 	}
-	return lang
+	return language
 }

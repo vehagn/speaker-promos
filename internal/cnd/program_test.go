@@ -321,14 +321,18 @@ func TestSpeakerNames(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		in   Session
+		and  string
 		want string
 	}{
-		{mk(), ""},
-		{mk("A"), "A"},
-		{mk("A", "B"), "A and B"},
-		{mk("A", "B", "C"), "A, B and C"},
+		{mk(), "and", ""},
+		{mk("A"), "and", "A"},
+		{mk("A", "B"), "and", "A and B"},
+		{mk("A", "B", "C"), "and", "A, B and C"},
+		// A Norwegian talk's card joins with "og".
+		{mk("A", "B"), "og", "A og B"},
+		{mk("A", "B", "C"), "og", "A, B og C"},
 	} {
-		if got := tc.in.SpeakerNames(); got != tc.want {
+		if got := tc.in.SpeakerNames(tc.and); got != tc.want {
 			t.Errorf("SpeakerNames = %q, want %q", got, tc.want)
 		}
 	}

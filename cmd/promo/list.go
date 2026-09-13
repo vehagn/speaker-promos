@@ -59,7 +59,7 @@ func cmdList(args []string) error {
 			s.Day,
 			s.TimeRange(),
 			truncate(shortTrack(s.Track), 18),
-			truncate(s.SpeakerNames(), 28),
+			truncate(s.SpeakerNames("and"), 28),
 			truncate(s.Talk.Title, 44),
 			primarySelector(s),
 		)

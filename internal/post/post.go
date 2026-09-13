@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/vehagn/speaker-promos/internal/cnd"
+	"github.com/vehagn/speaker-promos/internal/lang"
 )
 
 // BlueskyLimit is the maximum length of a Bluesky post, in graphemes as Bluesky
@@ -37,11 +38,11 @@ type Input struct {
 	Speakers   []Speaker
 	// Language selects the wording. The zero value is Auto, so an Input built
 	// without thinking about language still gets the talk's own.
-	Language Language
+	Language lang.Language
 }
 
 // lang resolves the language actually used for this input.
-func (in Input) lang() Language {
+func (in Input) language() lang.Language {
 	return in.Language.Resolve(in.Session.Talk.Title, in.Session.Talk.Abstract)
 }
 
@@ -60,13 +61,13 @@ func LinkedIn(in Input) Draft {
 	var b strings.Builder
 	b.WriteString(hook(in))
 	b.WriteString("\n\n")
-	fmt.Fprintf(&b, "%s\n", quoteTitle(s.Talk.Title, in.lang()))
+	fmt.Fprintf(&b, "%s\n", quoteTitle(s.Talk.Title, in.language()))
 
 	if teaser := cnd.FirstSentences(s.Talk.Abstract, 320); teaser != "" {
 		fmt.Fprintf(&b, "\n%s\n", teaser)
 	}
 
-	fmt.Fprintf(&b, "\n📅 %s · %s\n", s.TimeRange(), dayLabel(in.Conference, s, in.lang()))
+	fmt.Fprintf(&b, "\n📅 %s · %s\n", s.TimeRange(), dayLabel(in.Conference, s, in.language()))
 	if track := shortTrack(s.Track); track != "" {
 		fmt.Fprintf(&b, "📍 %s\n", track)
 	}
@@ -99,7 +100,7 @@ func Bluesky(in Input) Draft {
 	// The post is built as head + optional middle + tail. The tail holds the
 	// mentions and the link, which are the parts that must never be cut, so
 	// they are reserved up front rather than trimmed off the end.
-	head := hook(in) + "\n\n" + quoteTitle(s.Talk.Title, in.lang())
+	head := hook(in) + "\n\n" + quoteTitle(s.Talk.Title, in.language())
 	tail := ""
 	if mentions != "" {
 		tail += "\n\n" + mentions
@@ -108,7 +109,7 @@ func Bluesky(in Input) Draft {
 		tail += "\n" + url
 	}
 
-	slot := fmt.Sprintf("\n\n%s · %s", s.TimeRange(), dayLabel(in.Conference, s, in.lang()))
+	slot := fmt.Sprintf("\n\n%s · %s", s.TimeRange(), dayLabel(in.Conference, s, in.language()))
 	fits := func(parts ...string) bool {
 		return len([]rune(strings.Join(parts, ""))) <= BlueskyLimit
 	}
@@ -154,7 +155,7 @@ func Bluesky(in Input) Draft {
 
 // hook is the opening sentence, naming the speakers and their employers.
 func hook(in Input) string {
-	w := in.lang().words()
+	w := in.language().Words()
 
 	names := make([]string, 0, len(in.Speakers))
 	for _, sp := range in.Speakers {
@@ -164,28 +165,28 @@ func hook(in Input) string {
 		}
 		names = append(names, name)
 	}
-	who := joinAnd(names, w.and)
+	who := joinAnd(names, w.And)
 	if who == "" {
-		who = w.anonymous
+		who = w.Anonymous
 	}
 
 	plural := len(in.Speakers) > 1
-	verb := w.speakingSingular
+	verb := w.SpeakingSingular
 	if plural {
-		verb = w.speakingPlural
+		verb = w.SpeakingPlural
 	}
 	if strings.HasPrefix(in.Session.Talk.Format, "workshop") {
-		verb = w.workshopSingular
+		verb = w.WorkshopSingular
 		if plural {
-			verb = w.workshopPlural
+			verb = w.WorkshopPlural
 		}
 	}
-	return fmt.Sprintf("%s %s %s %s 🎤", who, verb, w.at, in.Conference.Title)
+	return fmt.Sprintf("%s %s %s %s 🎤", who, verb, w.At, in.Conference.Title)
 }
 
 // quoteTitle wraps a talk title in quotation marks, unless it already carries
 // its own. Norwegian uses angle quotation marks.
-func quoteTitle(title string, lang Language) string {
+func quoteTitle(title string, l lang.Language) string {
 	if title == "" {
 		return ""
 	}
@@ -194,8 +195,8 @@ func quoteTitle(title string, lang Language) string {
 			return title
 		}
 	}
-	w := lang.words()
-	return w.quoteOpen + title + w.quoteClose
+	w := l.Words()
+	return w.QuoteOpen + title + w.QuoteClose
 }
 
 // dayLabel names the conference day, e.g. "Monday 26 October" or
@@ -203,10 +204,10 @@ func quoteTitle(title string, lang Language) string {
 //
 // The names are looked up rather than taken from time.Format, which only knows
 // English.
-func dayLabel(conf cnd.Conference, s cnd.Session, lang Language) string {
+func dayLabel(conf cnd.Conference, s cnd.Session, l lang.Language) string {
 	if d := parseDate(s.Date); d != nil {
-		w := lang.words()
-		return w.date(w, *d)
+		w := l.Words()
+		return w.Date(w, *d)
 	}
 	return conf.DateRange()
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/vehagn/speaker-promos/internal/cache"
 	"github.com/vehagn/speaker-promos/internal/cnd"
 	"github.com/vehagn/speaker-promos/internal/export"
+	"github.com/vehagn/speaker-promos/internal/lang"
 	"github.com/vehagn/speaker-promos/internal/manifest"
 	"github.com/vehagn/speaker-promos/internal/post"
 	"github.com/vehagn/speaker-promos/internal/raster"
@@ -48,8 +49,8 @@ type Options struct {
 	// RasterWidth and JPEGQuality mirror the export flags; zero means default.
 	RasterWidth int
 	JPEGQuality int
-	// Language is the default copy language; post.Auto detects it per talk.
-	Language post.Language
+	// Language is the default copy language; lang.Auto detects it per talk.
+	Language lang.Language
 }
 
 // Server renders the preview site.
@@ -214,7 +215,7 @@ func (s *Server) handleTalkUpdate(w http.ResponseWriter, r *http.Request) {
 	if spec.DisplayTitle == sess.Talk.Title {
 		spec.DisplayTitle = ""
 	}
-	if _, err := post.ParseLanguage(spec.Language); err != nil {
+	if _, err := lang.ParseLanguage(spec.Language); err != nil {
 		s.fail(w, err)
 		return
 	}
@@ -374,7 +375,7 @@ func (s *Server) card(id, size string) (string, cnd.Session, bool) {
 	// Card, not Inspect: this is the image the browser shows and downloads, so
 	// it needs the photo and the embedded fonts. Inspect is only for the
 	// warnings on the page around it.
-	res, err := s.renderer.Card(s.opts.Program.Conference, rewritten, size)
+	res, err := s.renderer.Card(s.opts.Program.Conference, rewritten, size, s.cardLanguage(sess.Talk.ID))
 	if err != nil {
 		return "", cnd.Session{}, false
 	}
@@ -647,11 +648,11 @@ func (s *Server) buildViewLocked(sess cnd.Session, size string, p probes) talkVi
 	view.Talk, _ = set.Talk(sess.Talk.ID)
 	view.SubmittedTitle = sess.Talk.Title
 
-	lang := set.LanguageFor(sess.Talk.ID)
-	if lang == post.Auto {
-		lang = s.opts.Language
+	language := set.LanguageFor(sess.Talk.ID)
+	if language == lang.Auto {
+		language = s.opts.Language
 	}
-	in := post.Input{Conference: s.opts.Program.Conference, Session: rewritten, Language: lang}
+	in := post.Input{Conference: s.opts.Program.Conference, Session: rewritten, Language: language}
 	for i, sp := range sess.Talk.Speakers {
 		links := overrides.LinksFor(sp, p.linksFor(sp.Slug))
 		role := overrides.RoleFor(sp)
@@ -687,7 +688,7 @@ func (s *Server) buildViewLocked(sess cnd.Session, size string, p probes) talkVi
 	}
 
 	view.Language = in.Language.Resolve(rewritten.Talk.Title, rewritten.Talk.Abstract)
-	view.Detected = post.Detect(rewritten.Talk.Title, rewritten.Talk.Abstract)
+	view.Detected = lang.Detect(rewritten.Talk.Title, rewritten.Talk.Abstract)
 
 	view.Drafts = []draftView{
 		{Draft: post.LinkedIn(in)},
@@ -701,7 +702,9 @@ func (s *Server) buildViewLocked(sess cnd.Session, size string, p probes) talkVi
 	// Inspect, not Card: the warnings come from the text layout, and a full
 	// render here would fetch a photo and base64 two fonts for every row on the
 	// page — under this lock.
-	if res, err := s.renderer.Inspect(s.opts.Program.Conference, rewritten, size); err == nil {
+	if res, err := // The card shares the copy's language: a Norwegian talk joins its
+		// speakers with "og" on the image too.
+		s.renderer.Inspect(s.opts.Program.Conference, rewritten, size, language); err == nil {
 		if res.EmojiFallback {
 			view.Warnings = append(view.Warnings,
 				"contains emoji: renders in browsers, but Inkscape and librsvg leave a gap")
@@ -740,4 +743,14 @@ func pickNonEmpty(a, b string) string {
 		return a
 	}
 	return b
+}
+
+// cardLanguage resolves the wording a talk's card should use: its own override
+// where there is one, otherwise the server default, otherwise detection.
+func (s *Server) cardLanguage(talkID string) lang.Language {
+	l := s.opts.Set.LanguageFor(talkID)
+	if l == lang.Auto {
+		l = s.opts.Language
+	}
+	return l
 }

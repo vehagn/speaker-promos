@@ -19,6 +19,7 @@ import (
 	"github.com/vehagn/speaker-promos/internal/cache"
 
 	"github.com/vehagn/speaker-promos/internal/cnd"
+	"github.com/vehagn/speaker-promos/internal/lang"
 	"github.com/vehagn/speaker-promos/internal/theme"
 )
 
@@ -83,7 +84,7 @@ func TestGoldenCards(t *testing.T) {
 	r := renderer(t)
 	for _, size := range []string{"portrait", "landscape"} {
 		t.Run(size, func(t *testing.T) {
-			res, err := r.Card(testConference(), testSession(), size)
+			res, err := r.Card(testConference(), testSession(), size, lang.Auto)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -153,7 +154,7 @@ func TestCardsAreWellFormedXML(t *testing.T) {
 	s.Talk.Speakers[0].Name = `A & B <b>bold</b>`
 
 	for _, size := range []string{"portrait", "landscape"} {
-		res, err := r.Card(testConference(), s, size)
+		res, err := r.Card(testConference(), s, size, lang.Auto)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -183,7 +184,7 @@ func TestCardsAreWellFormedXML(t *testing.T) {
 func TestNoCSSColorSyntaxInAttributes(t *testing.T) {
 	r := renderer(t)
 	for _, size := range []string{"portrait", "landscape"} {
-		res, err := r.Card(testConference(), testSession(), size)
+		res, err := r.Card(testConference(), testSession(), size, lang.Auto)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -197,7 +198,7 @@ func TestNoCSSColorSyntaxInAttributes(t *testing.T) {
 
 func TestOnlyUsedFacesAreEmbedded(t *testing.T) {
 	r := renderer(t)
-	res, err := r.Card(testConference(), testSession(), "portrait")
+	res, err := r.Card(testConference(), testSession(), "portrait", lang.Auto)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +217,7 @@ func TestEmojiIsReportedAndStrippable(t *testing.T) {
 	s := testSession()
 	s.Talk.Title = "Kan 🇳🇴 skyen kjøre på en brødrister?"
 
-	res, err := r.Card(testConference(), s, "portrait")
+	res, err := r.Card(testConference(), s, "portrait", lang.Auto)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,7 +238,7 @@ func TestEmojiIsReportedAndStrippable(t *testing.T) {
 		t.Fatal(err)
 	}
 	stripped.StripEmoji = true
-	res2, err := stripped.Card(testConference(), s, "portrait")
+	res2, err := stripped.Card(testConference(), s, "portrait", lang.Auto)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -260,7 +261,7 @@ func TestEmojiIsReportedAndStrippable(t *testing.T) {
 // empty square; five of the 2026 speakers have no image or no title.
 func TestMissingPhotoFallsBackToMonogram(t *testing.T) {
 	r := renderer(t)
-	res, err := r.Card(testConference(), testSession(), "portrait")
+	res, err := r.Card(testConference(), testSession(), "portrait", lang.Auto)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -276,7 +277,7 @@ func TestMissingTitleOmitsRoleLine(t *testing.T) {
 	r := renderer(t)
 	s := testSession()
 	s.Talk.Speakers[0].Title = ""
-	res, err := r.Card(testConference(), s, "portrait")
+	res, err := r.Card(testConference(), s, "portrait", lang.Auto)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -296,7 +297,7 @@ func TestMissingLogoFallsBackToConferenceName(t *testing.T) {
 	r := renderer(t)
 	conf := testConference()
 	conf.LogoBright = ""
-	res, err := r.Card(conf, testSession(), "portrait")
+	res, err := r.Card(conf, testSession(), "portrait", lang.Auto)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -402,11 +403,11 @@ func TestInspectAgreesWithCard(t *testing.T) {
 
 	for i, sess := range sessions {
 		for _, size := range []string{"portrait", "landscape"} {
-			card, err := r.Card(conf, sess, size)
+			card, err := r.Card(conf, sess, size, lang.Auto)
 			if err != nil {
 				t.Fatal(err)
 			}
-			seen, err := r.Inspect(conf, sess, size)
+			seen, err := r.Inspect(conf, sess, size, lang.Auto)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -448,7 +449,7 @@ func TestInspectSkipsPhotosAndFonts(t *testing.T) {
 	sess := testSession()
 	sess.Talk.Speakers[0].Image = srv.URL + "/photo.png"
 
-	seen, err := r.Inspect(testConference(), sess, "portrait")
+	seen, err := r.Inspect(testConference(), sess, "portrait", lang.Auto)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -463,7 +464,7 @@ func TestInspectSkipsPhotosAndFonts(t *testing.T) {
 	}
 
 	// Card, by contrast, does both.
-	card, err := r.Card(testConference(), sess, "portrait")
+	card, err := r.Card(testConference(), sess, "portrait", lang.Auto)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -489,4 +490,58 @@ func onePixelPNG(t *testing.T) []byte {
 		t.Fatal(err)
 	}
 	return buf.Bytes()
+}
+
+// The card joins speaker names with the talk's own conjunction. It was
+// hardcoded "and", so a Norwegian talk's image read "leffen and Lars" while
+// the copy beside it correctly said "og".
+func TestCardJoinsSpeakerNamesInTheTalksLanguage(t *testing.T) {
+	r := renderer(t)
+	conf := testConference()
+
+	norwegian := testSession()
+	norwegian.Talk.Title = "Agentic Cloud Ops: Praktisk AI-drevet Kubernetes-drift"
+	norwegian.Talk.Abstract = "Vi ser på hvordan du kan bruke agenter til å drifte " +
+		"klyngen, hva som ikke fungerte, og hva vi gjorde med det."
+	norwegian.Talk.Speakers = []cnd.Speaker{
+		{ID: "a", Name: "leffen", Slug: "leffen"},
+		{ID: "b", Name: "Lars", Slug: "lars"},
+	}
+
+	english := testSession()
+	english.Talk.Title = "Shift Left with Reliability Testing"
+	english.Talk.Abstract = "This talk walks through what broke and why the obvious " +
+		"fix made it worse, with the numbers that convinced us."
+	english.Talk.Speakers = []cnd.Speaker{
+		{ID: "c", Name: "Imma Valls", Slug: "imma-valls"},
+		{ID: "d", Name: "Tom Donohue", Slug: "tom-donohue"},
+	}
+
+	for _, size := range []string{"portrait", "landscape"} {
+		// Detected from the talk itself.
+		no, err := r.Card(conf, norwegian, size, lang.Auto)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := svgText(t, no.SVG); !strings.Contains(got, "leffen og Lars") {
+			t.Errorf("%s: card text = %q, want \"leffen og Lars\"", size, got)
+		}
+
+		en, err := r.Card(conf, english, size, lang.Auto)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := svgText(t, en.SVG); !strings.Contains(got, "Imma Valls and Tom Donohue") {
+			t.Errorf("%s: card text = %q, want an English \"and\"", size, got)
+		}
+
+		// And an explicit language overrides detection, as it does for the copy.
+		forced, err := r.Card(conf, english, size, lang.Norwegian)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := svgText(t, forced.SVG); !strings.Contains(got, "Imma Valls og Tom Donohue") {
+			t.Errorf("%s: forced Norwegian card text = %q", size, got)
+		}
+	}
 }

@@ -54,7 +54,7 @@ func (r *Renderer) landscape(conf cnd.Conference, s cnd.Session, g theme.Geometr
 	leftCentre := pad + leftWidth/2
 
 	photoSize, positions := photoRow(g, len(s.Talk.Speakers), leftCentre, leftWidth)
-	nameH := r.measureHeight(g, "name", s.SpeakerNames(), leftWidth)
+	nameH := r.measureHeight(g, "name", s.SpeakerNames(p.words.And), leftWidth)
 	role := rolesLine(s.Talk.Speakers)
 	roleH := r.measureHeight(g, "role", role, leftWidth)
 
@@ -76,7 +76,7 @@ func (r *Renderer) landscape(conf cnd.Conference, s cnd.Session, g theme.Geometr
 	if len(positions) > 0 {
 		y += photoSize + float64(g.Gap)*0.6
 	}
-	if _, err := r.text(c, p, g, "name", s.SpeakerNames(), leftCentre, y, leftWidth, "middle"); err != nil {
+	if _, err := r.text(c, p, g, "name", s.SpeakerNames(p.words.And), leftCentre, y, leftWidth, "middle"); err != nil {
 		return "", err
 	}
 	y += nameH

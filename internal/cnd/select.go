@@ -80,7 +80,7 @@ func (p Program) FindOne(selector string) (Session, error) {
 	default:
 		var names []string
 		for _, h := range hits {
-			names = append(names, fmt.Sprintf("%q (%s)", h.Talk.Title, h.SpeakerNames()))
+			names = append(names, fmt.Sprintf("%q (%s)", h.Talk.Title, h.SpeakerNames("and")))
 		}
 		return Session{}, fmt.Errorf("%q matches %d talks: %s", selector, len(hits), strings.Join(names, ", "))
 	}

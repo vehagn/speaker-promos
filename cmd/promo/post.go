@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/vehagn/speaker-promos/internal/cnd"
+	"github.com/vehagn/speaker-promos/internal/lang"
 	"github.com/vehagn/speaker-promos/internal/post"
 )
 
@@ -28,7 +29,7 @@ func cmdPost(args []string) error {
 		return err
 	}
 	overrides := set.Overrides()
-	lang, err := post.ParseLanguage(*language)
+	copyLang, err := lang.ParseLanguage(*language)
 	if err != nil {
 		return err
 	}
@@ -52,8 +53,8 @@ func cmdPost(args []string) error {
 		// A per-talk override wins over the flag, which in turn wins over
 		// detection.
 		talkLang := set.LanguageFor(s.Talk.ID)
-		if talkLang == post.Auto {
-			talkLang = lang
+		if talkLang == lang.Auto {
+			talkLang = copyLang
 		}
 		in := post.Input{Conference: program.Conference, Session: s, Language: talkLang}
 		for _, sp := range s.Talk.Speakers {

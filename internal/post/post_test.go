@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/vehagn/speaker-promos/internal/cnd"
+	"github.com/vehagn/speaker-promos/internal/lang"
 )
 
 // These are the exact title strings the 2026 program contains, which is the
@@ -42,7 +43,7 @@ func TestParseRole(t *testing.T) {
 	}
 }
 
-// " i " is deliberately NOT a separator: it is the Norwegian "in" but also
+// " i " is deliberately NOT a separator: it is the lang.Norwegian "in" but also
 // appears mid-phrase, where splitting on it produces nonsense.
 func TestParseRoleLeavesNorwegianIAlone(t *testing.T) {
 	got := ParseRole("Manager og faggruppeleder Platform Engineering i Tindra")
@@ -284,14 +285,14 @@ func TestMentionsListsProfiles(t *testing.T) {
 }
 
 func TestQuoteTitle(t *testing.T) {
-	if got := quoteTitle("Pods on Mars", English); got != "“Pods on Mars”" {
+	if got := quoteTitle("Pods on Mars", lang.English); got != "“Pods on Mars”" {
 		t.Errorf("quoteTitle = %q", got)
 	}
 	// A title that already quotes itself is not double-quoted.
-	if got := quoteTitle("“Already quoted”", English); got != "“Already quoted”" {
+	if got := quoteTitle("“Already quoted”", lang.English); got != "“Already quoted”" {
 		t.Errorf("quoteTitle = %q", got)
 	}
-	if got := quoteTitle("", English); got != "" {
+	if got := quoteTitle("", lang.English); got != "" {
 		t.Errorf("quoteTitle empty = %q", got)
 	}
 }

@@ -1061,3 +1061,44 @@ func TestRoleLineFieldTracksTheCard(t *testing.T) {
 		t.Errorf("a real role line edit was not stored:\n%s", saved)
 	}
 }
+
+// The preview server must resolve the card's language the same way it resolves
+// the copy's, so the image and the draft beside it cannot disagree.
+func TestServedCardUsesTheTalksLanguage(t *testing.T) {
+	dir := t.TempDir()
+	th, err := theme.Default()
+	if err != nil {
+		t.Fatal(err)
+	}
+	program := testProgram()
+	program.Sessions[0].Talk.Title = "Praktisk AI-drevet Kubernetes-drift"
+	program.Sessions[0].Talk.Abstract = "Vi ser på hvordan det ikke fungerte og hva vi gjorde med det."
+	program.Sessions[0].Talk.Speakers = []cnd.Speaker{
+		{ID: "a", Name: "leffen", Slug: "leffen"},
+		{ID: "b", Name: "Lars", Slug: "lars"},
+	}
+
+	set := manifest.New(filepath.Join(dir, "promos.yaml"))
+	srv, err := New(Options{
+		Program: program, Set: set, Theme: th, Size: "portrait",
+		OutDir: filepath.Join(dir, "out"), NoLinks: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := srv.Handler()
+
+	card := svgText(t, get(t, h, "/card/"+talkID).Body.String())
+	if !strings.Contains(card, "leffen og Lars") {
+		t.Errorf("served card = %q, want the Norwegian conjunction", card)
+	}
+
+	// Forcing English through the talk override changes the card too.
+	if rec := postForm(t, h, "/talk/"+talkID, url.Values{"language": {"en"}}); rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	card = svgText(t, get(t, h, "/card/"+talkID).Body.String())
+	if !strings.Contains(card, "leffen and Lars") {
+		t.Errorf("served card = %q, want the forced English conjunction", card)
+	}
+}

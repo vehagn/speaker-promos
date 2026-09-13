@@ -1,4 +1,11 @@
-package post
+// Package lang decides which language a talk's generated text is written in,
+// and holds the wording for each.
+//
+// It is its own package because both the social copy and the cards need it: a
+// Norwegian talk whose card joins its speakers with "and" is wrong in the same
+// way an English hook over a Norwegian abstract is. Putting it in the copy
+// package would have made the renderer depend on the renderer's opposite.
+package lang
 
 import (
 	"fmt"
@@ -114,70 +121,70 @@ func (l Language) Resolve(title, abstract string) Language {
 	return Detect(title, abstract)
 }
 
-// phrases is the wording a draft needs, per language.
-type phrases struct {
+// Phrases is the wording generated text needs, per language.
+type Phrases struct {
 	// speaking and workshop are the verb phrases in "<who> <verb> <event>".
 	// Norwegian has no verb-number agreement, so one form covers both a single
 	// speaker and several — unlike English, which needs is/are.
-	speakingSingular string
-	speakingPlural   string
-	workshopSingular string
-	workshopPlural   string
+	SpeakingSingular string
+	SpeakingPlural   string
+	WorkshopSingular string
+	WorkshopPlural   string
 	// at introduces the conference name.
-	at string
+	At string
 	// and joins the last two names in a list.
-	and string
+	And string
 	// anonymous stands in when no speaker is named.
-	anonymous string
+	Anonymous string
 	// quoteOpen and quoteClose wrap the talk title. Norwegian uses angle
 	// quotation marks.
-	quoteOpen, quoteClose string
+	QuoteOpen, QuoteClose string
 	// weekdays and months are indexed from time.Weekday and time.Month-1.
-	weekdays []string
-	months   []string
+	Weekdays []string
+	Months   []string
 	// date renders a weekday-and-date line from those names.
-	date func(p phrases, t time.Time) string
+	Date func(p Phrases, t time.Time) string
 }
 
-var table = map[Language]phrases{
+var table = map[Language]Phrases{
 	English: {
-		speakingSingular: "is speaking",
-		speakingPlural:   "are speaking",
-		workshopSingular: "is running a workshop",
-		workshopPlural:   "are running a workshop",
-		at:               "at",
-		and:              "and",
-		anonymous:        "One of our speakers",
-		quoteOpen:        "“", quoteClose: "”",
-		weekdays: []string{"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"},
-		months: []string{"January", "February", "March", "April", "May", "June",
+		SpeakingSingular: "is speaking",
+		SpeakingPlural:   "are speaking",
+		WorkshopSingular: "is running a workshop",
+		WorkshopPlural:   "are running a workshop",
+		At:               "at",
+		And:              "and",
+		Anonymous:        "One of our speakers",
+		QuoteOpen:        "“", QuoteClose: "”",
+		Weekdays: []string{"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"},
+		Months: []string{"January", "February", "March", "April", "May", "June",
 			"July", "August", "September", "October", "November", "December"},
-		date: func(p phrases, t time.Time) string {
-			return fmt.Sprintf("%s %d %s", p.weekdays[int(t.Weekday())], t.Day(), p.months[int(t.Month())-1])
+		Date: func(p Phrases, t time.Time) string {
+			return fmt.Sprintf("%s %d %s", p.Weekdays[int(t.Weekday())], t.Day(), p.Months[int(t.Month())-1])
 		},
 	},
 	Norwegian: {
-		speakingSingular: "holder foredrag",
-		speakingPlural:   "holder foredrag",
-		workshopSingular: "holder workshop",
-		workshopPlural:   "holder workshop",
-		at:               "på",
-		and:              "og",
-		anonymous:        "En av foredragsholderne våre",
-		quoteOpen:        "«", quoteClose: "»",
-		weekdays: []string{"søndag", "mandag", "tirsdag", "onsdag", "torsdag", "fredag", "lørdag"},
-		months: []string{"januar", "februar", "mars", "april", "mai", "juni",
+		SpeakingSingular: "holder foredrag",
+		SpeakingPlural:   "holder foredrag",
+		WorkshopSingular: "holder workshop",
+		WorkshopPlural:   "holder workshop",
+		At:               "på",
+		And:              "og",
+		Anonymous:        "En av foredragsholderne våre",
+		QuoteOpen:        "«", QuoteClose: "»",
+		Weekdays: []string{"søndag", "mandag", "tirsdag", "onsdag", "torsdag", "fredag", "lørdag"},
+		Months: []string{"januar", "februar", "mars", "april", "mai", "juni",
 			"juli", "august", "september", "oktober", "november", "desember"},
-		date: func(p phrases, t time.Time) string {
+		Date: func(p Phrases, t time.Time) string {
 			// Norwegian writes the day as an ordinal: "mandag 26. oktober".
-			return fmt.Sprintf("%s %d. %s", p.weekdays[int(t.Weekday())], t.Day(), p.months[int(t.Month())-1])
+			return fmt.Sprintf("%s %d. %s", p.Weekdays[int(t.Weekday())], t.Day(), p.Months[int(t.Month())-1])
 		},
 	},
 }
 
-// words returns the phrase table for a language, falling back to English so a
-// value from somewhere unvalidated cannot produce an empty post.
-func (l Language) words() phrases {
+// Words returns the phrase table for a language, falling back to English so a
+// value from somewhere unvalidated cannot produce empty text.
+func (l Language) Words() Phrases {
 	if p, ok := table[l]; ok {
 		return p
 	}

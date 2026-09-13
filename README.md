@@ -232,15 +232,20 @@ Detection is only a default. `--language en|no` forces one for a run, and `langu
 per-talk selector whose *auto* option names what detection picked, and each draft carries a
 badge showing the language it came out in.
 
-What changes is the wording the tool writes: the verb phrase, the conjunction, the
-quotation marks (`«»` rather than `“”`), and the weekday and month names, which are looked
-up rather than taken from `time.Format` — that only knows English. The "check before
-posting" notes stay in English; they are for you, not for the post.
+What changes in the copy: the verb phrase, the conjunction, the quotation marks (`«»`
+rather than `“”`), and the weekday and month names, which are looked up rather than taken
+from `time.Format` — that only knows English. The "check before posting" notes stay in
+English; they are for you, not for the post.
 
-**The cards stay in English.** Their text is conference chrome — the date line, the slot,
-the format — and it is identical on every card, so mixing languages across a set of images
-would look like a mistake rather than a choice. A post is different because it quotes the
-abstract.
+**The cards follow the talk too, but only where the wording is about the talk.** The
+conjunction between speaker names is: a Norwegian card reads *"leffen og Lars"*, and reading
+*"and"* there is simply wrong.
+
+The rest of a card's text is left in English on purpose — the date line, the `DAY 1 · …`
+slot, the format and level. Those are conference chrome, identical on every card, and the
+conference brands itself in English down to the track names ("Full Day Workshops"), so
+translating them would make a set of images look inconsistent rather than localised. Say so
+if you would rather have the whole card follow the talk.
 
 ### The link goes to the program
 
@@ -438,6 +443,7 @@ internal/cache/     on-disk HTTP cache
 internal/theme/     theme structs, YAML loading, embedded default-2026
 internal/layout/    font metrics, greedy wrap, size autofit
 internal/render/    SVG emitters (portrait, landscape)
+internal/lang/      language detection and per-language wording
 internal/post/      LinkedIn / Bluesky copy
 internal/raster/    SVG → PNG via an external tool, PNG → JPEG via stdlib
 internal/export/    per-talk bundles, shared by the CLI and the server

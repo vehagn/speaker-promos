@@ -9,7 +9,7 @@ import (
 	"github.com/vehagn/speaker-promos/internal/cache"
 	"github.com/vehagn/speaker-promos/internal/cnd"
 	"github.com/vehagn/speaker-promos/internal/export"
-	"github.com/vehagn/speaker-promos/internal/post"
+	"github.com/vehagn/speaker-promos/internal/lang"
 	"github.com/vehagn/speaker-promos/internal/raster"
 	"github.com/vehagn/speaker-promos/internal/render"
 	"github.com/vehagn/speaker-promos/internal/theme"
@@ -48,7 +48,7 @@ func cmdExport(args []string) error {
 	if err != nil {
 		return err
 	}
-	lang, err := post.ParseLanguage(*language)
+	copyLang, err := lang.ParseLanguage(*language)
 	if err != nil {
 		return err
 	}
@@ -94,7 +94,7 @@ func cmdExport(args []string) error {
 		Renderer:     renderer,
 		Set:          set,
 		Program:      program,
-		Language:     lang,
+		Language:     copyLang,
 		Formats:      wantFormats,
 		Sizes:        wantSizes,
 		RasterWidth:  *width,

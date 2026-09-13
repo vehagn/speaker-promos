@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/vehagn/speaker-promos/internal/cnd"
+	"github.com/vehagn/speaker-promos/internal/lang"
 	"github.com/vehagn/speaker-promos/internal/manifest"
 	"github.com/vehagn/speaker-promos/internal/post"
 )
@@ -37,10 +38,10 @@ type talkView struct {
 	Warnings []string
 	// Language is the language the drafts below were actually written in, after
 	// any override and detection, so a wrong guess is visible.
-	Language post.Language
+	Language lang.Language
 	// Detected is what detection picks on its own, so the "auto" option can say
 	// what it means for this talk.
-	Detected post.Language
+	Detected lang.Language
 }
 
 // speakerView is one speaker's resolved facts plus the form's current values.

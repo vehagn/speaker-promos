@@ -143,8 +143,12 @@ func (p Program) Speakers() []Speaker {
 }
 
 // SpeakerNames renders a session's speakers as prose: "A", "A and B", or
-// "A, B and C".
-func (s Session) SpeakerNames() string {
+// "A, B and C", using the given conjunction.
+//
+// The conjunction is a parameter rather than a constant because a Norwegian
+// talk's card should read "A og B". It is passed in rather than resolved here
+// so that the domain model stays free of presentation concerns.
+func (s Session) SpeakerNames(and string) string {
 	names := make([]string, 0, len(s.Talk.Speakers))
 	for _, sp := range s.Talk.Speakers {
 		if sp.Name != "" {
@@ -157,7 +161,7 @@ func (s Session) SpeakerNames() string {
 	case 1:
 		return names[0]
 	default:
-		return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
+		return strings.Join(names[:len(names)-1], ", ") + " " + and + " " + names[len(names)-1]
 	}
 }
 

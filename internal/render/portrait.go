@@ -66,7 +66,7 @@ func (r *Renderer) portrait(conf cnd.Conference, s cnd.Session, g theme.Geometry
 	}
 
 	// Names, then roles.
-	if h, err = r.text(c, p, g, "name", s.SpeakerNames(), centre, y, content, "middle"); err != nil {
+	if h, err = r.text(c, p, g, "name", s.SpeakerNames(p.words.And), centre, y, content, "middle"); err != nil {
 		return "", err
 	}
 	y += h

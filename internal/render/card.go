@@ -9,6 +9,7 @@ import (
 
 	"github.com/vehagn/speaker-promos/internal/cache"
 	"github.com/vehagn/speaker-promos/internal/cnd"
+	"github.com/vehagn/speaker-promos/internal/lang"
 	"github.com/vehagn/speaker-promos/internal/layout"
 	"github.com/vehagn/speaker-promos/internal/theme"
 )
@@ -53,8 +54,12 @@ type Result struct {
 }
 
 // Card renders one session at one card size.
-func (r *Renderer) Card(conf cnd.Conference, s cnd.Session, size string) (Result, error) {
-	return r.render(conf, s, size, false)
+//
+// l selects the wording — currently just the conjunction between speaker
+// names, which must be "og" on a Norwegian talk. Pass lang.Auto to have it
+// detected from the talk's own title and abstract.
+func (r *Renderer) Card(conf cnd.Conference, s cnd.Session, size string, l lang.Language) (Result, error) {
+	return r.render(conf, s, size, l, false)
 }
 
 // Inspect reports what rendering a card would warn about — truncated text, or
@@ -68,16 +73,21 @@ func (r *Renderer) Card(conf cnd.Conference, s cnd.Session, size string) (Result
 // which needs neither.
 //
 // The returned SVG is not a card and must not be served.
-func (r *Renderer) Inspect(conf cnd.Conference, s cnd.Session, size string) (Result, error) {
-	return r.render(conf, s, size, true)
+func (r *Renderer) Inspect(conf cnd.Conference, s cnd.Session, size string, l lang.Language) (Result, error) {
+	return r.render(conf, s, size, l, true)
 }
 
-func (r *Renderer) render(conf cnd.Conference, s cnd.Session, size string, inspect bool) (Result, error) {
+func (r *Renderer) render(conf cnd.Conference, s cnd.Session, size string,
+	l lang.Language, inspect bool) (Result, error) {
 	g, err := r.Theme.Size(size)
 	if err != nil {
 		return Result{}, err
 	}
-	p := &pass{faces: map[string]bool{}, inspect: inspect}
+	p := &pass{
+		faces:   map[string]bool{},
+		words:   l.Resolve(s.Talk.Title, s.Talk.Abstract).Words(),
+		inspect: inspect,
+	}
 
 	var svg string
 	switch size {
@@ -104,7 +114,9 @@ func (r *Renderer) render(conf cnd.Conference, s cnd.Session, size string, inspe
 // embedded — carrying all three Space Grotesk weights when a card uses two adds
 // ~150 KB per file for nothing.
 type pass struct {
-	faces    map[string]bool
+	faces map[string]bool
+	// words is the wording for this card's language, resolved once.
+	words    lang.Phrases
 	emoji    bool
 	overflow []string
 	// inspect asks for the warnings only. It skips fetching photos and
