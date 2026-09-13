@@ -50,6 +50,8 @@ func run(args []string) error {
 		return cmdList(rest)
 	case "svg":
 		return cmdSVG(rest)
+	case "post":
+		return cmdPost(rest)
 	case "fonts":
 		return cmdFonts(rest)
 	case "theme":
