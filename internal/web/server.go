@@ -20,8 +20,10 @@ import (
 
 	"github.com/vehagn/speaker-promos/internal/cache"
 	"github.com/vehagn/speaker-promos/internal/cnd"
+	"github.com/vehagn/speaker-promos/internal/export"
 	"github.com/vehagn/speaker-promos/internal/manifest"
 	"github.com/vehagn/speaker-promos/internal/post"
+	"github.com/vehagn/speaker-promos/internal/raster"
 	"github.com/vehagn/speaker-promos/internal/render"
 	"github.com/vehagn/speaker-promos/internal/theme"
 )
@@ -40,6 +42,12 @@ type Options struct {
 	OutDir   string
 	NoLinks  bool
 	NoPhotos bool
+	// Formats is what the Export button writes per talk. Empty means all of
+	// svg, png and jpg.
+	Formats []string
+	// RasterWidth and JPEGQuality mirror the export flags; zero means default.
+	RasterWidth int
+	JPEGQuality int
 }
 
 // Server renders the preview site.
@@ -47,6 +55,9 @@ type Server struct {
 	opts     Options
 	renderer *render.Renderer
 	tmpl     *template.Template
+
+	converter    raster.Converter
+	hasConverter bool
 
 	// mu guards the manifest and everything derived from it. HTMX requests
 	// interleave freely — a browser will happily have two edits in flight — and
@@ -81,12 +92,18 @@ func New(opts Options) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parsing templates: %w", err)
 	}
+	if len(opts.Formats) == 0 {
+		opts.Formats = export.AllFormats
+	}
+	conv, _, hasConv := raster.Find()
 	return &Server{
-		opts:     opts,
-		renderer: renderer,
-		tmpl:     tmpl,
-		rev:      time.Now().Unix(),
-		links:    map[string]cnd.Links{},
+		opts:         opts,
+		renderer:     renderer,
+		tmpl:         tmpl,
+		converter:    conv,
+		hasConverter: hasConv,
+		rev:          time.Now().Unix(),
+		links:        map[string]cnd.Links{},
 	}, nil
 }
 
@@ -419,4 +436,24 @@ func (s *Server) buildViewLocked(sess cnd.Session, size string) talkView {
 		}
 	}
 	return view
+}
+
+// exporter builds the bundle writer for the given card sizes.
+//
+// It is constructed per request rather than held on the Server because the
+// requested size comes from the query string, and because the manifest it reads
+// changes with every edit. Callers must hold s.mu.
+func (s *Server) exporter(sizes []string) *export.Exporter {
+	return &export.Exporter{
+		Renderer:     s.renderer,
+		Set:          s.opts.Set,
+		Conference:   s.opts.Program.Conference,
+		Formats:      s.opts.Formats,
+		Sizes:        sizes,
+		RasterWidth:  s.opts.RasterWidth,
+		JPEGQuality:  s.opts.JPEGQuality,
+		LinksFor:     s.speakerLinks,
+		Converter:    s.converter,
+		HasConverter: s.hasConverter,
+	}
 }

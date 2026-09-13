@@ -290,26 +290,74 @@ func TestTalkOverrideAndHidden(t *testing.T) {
 	}
 }
 
-func TestExportWritesVisibleCardsOnly(t *testing.T) {
+func TestExportWritesABundlePerTalk(t *testing.T) {
 	srv, h, _ := newTestServer(t)
 
 	rec := postForm(t, h, "/export", url.Values{"size": {"portrait"}})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d\n%s", rec.Code, rec.Body)
 	}
-	if !strings.Contains(rec.Body.String(), "wrote 2 cards") {
+	if !strings.Contains(rec.Body.String(), "wrote 2 talks") {
 		t.Errorf("export said %q", rec.Body.String())
 	}
-	files, _ := filepath.Glob(filepath.Join(srv.opts.OutDir, "*.svg"))
-	if len(files) != 2 {
-		t.Fatalf("wrote %d files, want 2", len(files))
+
+	// One folder per talk, named the same as the CLI names it.
+	dirs, _ := filepath.Glob(filepath.Join(srv.opts.OutDir, "*"))
+	if len(dirs) != 2 {
+		t.Fatalf("wrote %d folders, want 2: %v", len(dirs), dirs)
+	}
+	var bundle string
+	for _, d := range dirs {
+		if strings.Contains(filepath.Base(d), "dario-haaland") {
+			bundle = d
+		}
+	}
+	if bundle == "" {
+		t.Fatalf("no folder named after the speaker: %v", dirs)
 	}
 
-	// Hiding a talk excludes it, matching `promo svg --all`.
+	// The card, both drafts and the editable manifest. PNG and JPEG depend on
+	// a rasteriser being installed, so they are not required here.
+	for _, name := range []string{"portrait.svg", "linkedin.txt", "bluesky.txt", "promo.yaml"} {
+		fi, err := os.Stat(filepath.Join(bundle, name))
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		if fi.Size() == 0 {
+			t.Errorf("%s is empty", name)
+		}
+	}
+
+	// The copy file must hold the post body alone, so it pastes verbatim.
+	body, err := os.ReadFile(filepath.Join(bundle, "bluesky.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "check before posting") {
+		t.Error("bluesky.txt should not carry the review notes")
+	}
+	if !strings.Contains(string(body), "Dario Haaland") {
+		t.Errorf("bluesky.txt = %q", body)
+	}
+
+	// The manifest is pre-filled with what the card actually used, so it can be
+	// edited and fed back.
+	yml, err := os.ReadFile(filepath.Join(bundle, "promo.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"kind: SpeakerOverride", "name: dario-haaland", "Bysten Labs"} {
+		if !strings.Contains(string(yml), want) {
+			t.Errorf("promo.yaml missing %q:\n%s", want, yml)
+		}
+	}
+
+	// Hiding a talk excludes it, matching `promo export --all`.
 	postForm(t, h, "/talk/talk-2", url.Values{"hidden": {"1"}})
 	os.RemoveAll(srv.opts.OutDir)
 	rec = postForm(t, h, "/export", url.Values{})
-	if !strings.Contains(rec.Body.String(), "wrote 1 cards") || !strings.Contains(rec.Body.String(), "1 hidden") {
+	if !strings.Contains(rec.Body.String(), "wrote 1 talks") || !strings.Contains(rec.Body.String(), "1 hidden") {
 		t.Errorf("export said %q", rec.Body.String())
 	}
 }
@@ -321,7 +369,7 @@ func TestDownloadUsesTheCLIFilename(t *testing.T) {
 		t.Fatalf("status = %d", rec.Code)
 	}
 	cd := rec.Header().Get("Content-Disposition")
-	// Same stem as `promo svg` writes, so a browser download and a CLI export
+	// Same stem as `promo export` writes, so a browser download and a CLI export
 	// land on the same name.
 	if !strings.Contains(cd, "d1-0900-dario-haaland") || !strings.Contains(cd, ".svg") {
 		t.Errorf("Content-Disposition = %q", cd)

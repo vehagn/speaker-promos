@@ -8,6 +8,7 @@ import (
 
 	"github.com/vehagn/speaker-promos/internal/cache"
 	"github.com/vehagn/speaker-promos/internal/cnd"
+	"github.com/vehagn/speaker-promos/internal/export"
 	"github.com/vehagn/speaker-promos/internal/theme"
 	"github.com/vehagn/speaker-promos/internal/web"
 )
@@ -22,6 +23,9 @@ func cmdServe(args []string) error {
 	size := fs.String("size", "portrait", "card size to preview")
 	themePath := fs.String("theme", "", "theme YAML to merge over the built-in theme")
 	out := fs.String("out", "out", "directory the Export button writes into")
+	formats := fs.String("formats", "svg,png,jpg", "formats the Export button writes: any of svg, png, jpg")
+	width := fs.Int("width", 0, "raster width in pixels (default: the card's own width)")
+	quality := fs.Int("jpeg-quality", 88, "JPEG quality, 1-100")
 	noPhotos := fs.Bool("no-photos", false, "skip speaker photos (renders initials instead)")
 	noLinks := fs.Bool("no-links", false, "skip fetching speaker pages for social handles")
 	if err := parseFlags(fs, args); err != nil {
@@ -49,15 +53,23 @@ func cmdServe(args []string) error {
 		images.Disabled = common.noCache
 	}
 
+	wantFormats, err := export.ParseFormats(*formats)
+	if err != nil {
+		return err
+	}
+
 	server, err := web.New(web.Options{
-		Program: program,
-		Set:     set,
-		Theme:   th,
-		Images:  images,
-		Loader:  loader,
-		Size:    *size,
-		OutDir:  *out,
-		NoLinks: *noLinks,
+		Program:     program,
+		Set:         set,
+		Theme:       th,
+		Images:      images,
+		Loader:      loader,
+		Size:        *size,
+		OutDir:      *out,
+		NoLinks:     *noLinks,
+		Formats:     wantFormats,
+		RasterWidth: *width,
+		JPEGQuality: *quality,
 	})
 	if err != nil {
 		return err

@@ -18,7 +18,7 @@ const usage = `promo — speaker promo graphics for Cloud Native Days
 
 Usage:
   promo list [flags]                 index the program
-  promo svg  [flags] <selector>...   render promo SVGs
+  promo export [flags] <selector>... write a folder per talk: cards, copy, config
   promo post [flags] <selector>      draft LinkedIn / Bluesky copy
   promo serve [flags]                preview every card in a browser and edit
   promo fonts install                install the brand fonts locally
@@ -50,8 +50,8 @@ func run(args []string) error {
 	switch cmd {
 	case "list":
 		return cmdList(rest)
-	case "svg":
-		return cmdSVG(rest)
+	case "export":
+		return cmdExport(rest)
 	case "post":
 		return cmdPost(rest)
 	case "serve":
@@ -152,7 +152,7 @@ func newFlagSet(name string) *flag.FlagSet {
 
 func positionalHint(cmd string) string {
 	switch cmd {
-	case "svg":
+	case "export":
 		return "<selector>..."
 	case "post":
 		return "<selector>"
@@ -176,7 +176,7 @@ func truncate(s string, n int) string {
 // parseFlags parses args allowing flags to appear after positional arguments.
 //
 // Go's flag package stops parsing at the first non-flag argument, so
-// `promo svg dario-haaland --out promos/` would silently treat "--out" and
+// `promo export dario-haaland --out promos/` would silently treat "--out" and
 // "promos/" as selectors. That word order is the natural one and every other
 // modern CLI accepts it, so the arguments are permuted first: flags (with their
 // values) are hoisted ahead of the positionals.

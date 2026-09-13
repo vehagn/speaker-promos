@@ -37,6 +37,10 @@ func New(t *theme.Theme, images *cache.Cache) (*Renderer, error) {
 // Result is a rendered card plus anything about it the caller should know.
 type Result struct {
 	SVG string
+	// Width and Height are the card's pixel dimensions, so a caller
+	// rasterising it does not have to re-read the theme to learn them.
+	Width  int
+	Height int
 	// EmojiFallback is true when some text needed the system emoji family.
 	// Browsers and resvg honour it; Inkscape and librsvg do not substitute a
 	// colour emoji font and leave a gap instead, so this is worth telling the
@@ -65,7 +69,13 @@ func (r *Renderer) Card(conf cnd.Conference, s cnd.Session, size string) (Result
 	if err != nil {
 		return Result{}, err
 	}
-	return Result{SVG: svg, EmojiFallback: p.emoji, Overflow: p.overflow}, nil
+	return Result{
+		SVG:           svg,
+		Width:         g.Width,
+		Height:        g.Height,
+		EmojiFallback: p.emoji,
+		Overflow:      p.overflow,
+	}, nil
 }
 
 // pass is the state gathered while drawing one card.

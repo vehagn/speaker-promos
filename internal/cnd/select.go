@@ -14,8 +14,8 @@ import (
 // Selectors are resolved most-specific first so that a precise identifier is
 // never ambiguous: talk id prefix, then speaker slug, then a case-insensitive
 // substring of the talk title, then of a speaker name. The first tier that
-// matches anything wins, which is why `promo svg dario-haaland` and
-// `promo svg "pods on mars"` both do the obvious thing.
+// matches anything wins, which is why `promo export dario-haaland` and
+// `promo export "pods on mars"` both do the obvious thing.
 func (p Program) Find(selector string) []Session {
 	q := strings.ToLower(strings.TrimSpace(selector))
 	if q == "" {

@@ -3,46 +3,45 @@ package web
 import (
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
+	"strings"
 )
 
-// handleExport writes every visible card to the output directory.
+// handleExport writes a bundle per visible talk into the output directory.
 //
-// This is the same work `promo svg --all` does, exposed so that a review
-// session can end without switching back to the terminal. Hidden talks are
-// skipped, matching the CLI.
+// It goes through the same internal/export code as `promo export`, so a bundle
+// produced from the browser and one produced from the terminal are identical.
+// Hidden talks are skipped, matching the CLI.
 func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
 	size := s.sizeParam(r)
-	dir := s.opts.OutDir
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		s.fail(w, fmt.Errorf("creating %s: %w", dir, err))
-		return
-	}
 
 	s.mu.Lock()
 	sessions := s.opts.Set.Apply(s.opts.Program.Sessions)
 	skipped := len(s.opts.Program.Sessions) - len(sessions)
+	exporter := s.exporter([]string{size})
 	s.mu.Unlock()
 
-	written := 0
+	talks, files := 0, 0
+	var warnings []string
 	for _, sess := range sessions {
-		res, err := s.renderer.Card(s.opts.Program.Conference, sess, size)
+		res, err := exporter.Write(s.opts.OutDir, sess)
 		if err != nil {
-			s.fail(w, fmt.Errorf("rendering %q: %w", sess.Talk.Title, err))
+			s.fail(w, err)
 			return
 		}
-		path := filepath.Join(dir, sess.FileStem()+".svg")
-		if err := os.WriteFile(path, []byte(res.SVG), 0o644); err != nil {
-			s.fail(w, fmt.Errorf("writing %s: %w", path, err))
-			return
-		}
-		written++
+		talks++
+		files += len(res.Files)
+		warnings = append(warnings, res.Warnings...)
 	}
 
-	msg := fmt.Sprintf("wrote %d cards", written)
+	msg := fmt.Sprintf("wrote %d talks, %d files", talks, files)
 	if skipped > 0 {
 		msg += fmt.Sprintf(" (%d hidden)", skipped)
+	}
+	if !s.hasConverter {
+		msg += " — SVG only, no rasteriser on PATH"
+	}
+	if n := len(warnings); n > 0 {
+		msg += fmt.Sprintf(", %d warning(s)", n)
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprint(w, htmlEscape(msg))
@@ -50,18 +49,5 @@ func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
 
 // htmlEscape is used for the few plain-text responses that land in the DOM.
 func htmlEscape(s string) string {
-	var out []byte
-	for i := 0; i < len(s); i++ {
-		switch s[i] {
-		case '<':
-			out = append(out, "&lt;"...)
-		case '>':
-			out = append(out, "&gt;"...)
-		case '&':
-			out = append(out, "&amp;"...)
-		default:
-			out = append(out, s[i])
-		}
-	}
-	return string(out)
+	return strings.NewReplacer("<", "&lt;", ">", "&gt;", "&", "&amp;").Replace(s)
 }

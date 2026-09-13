@@ -8,7 +8,7 @@ Posting stays manual — this tool removes the copy-paste-retype step, not the j
 ```sh
 go run ./cmd/promo serve                       # preview and edit everything in a browser
 go run ./cmd/promo list                        # index the program
-go run ./cmd/promo svg --all --out out/        # render every promo card
+go run ./cmd/promo export --all --out out/     # a folder per talk: cards, copy, config
 go run ./cmd/promo post dario-haaland          # draft LinkedIn / Bluesky copy
 ```
 
@@ -77,24 +77,51 @@ DAY  TIME         TRACK               SPEAKERS                      TALK        
 `--day N` and `--speaker <slug|name>` narrow it; `--json` emits the full domain model,
 abstracts included.
 
-## `promo svg`
+## `promo export`
 
 ```sh
-go run ./cmd/promo svg dario-haaland                      # one card, portrait
-go run ./cmd/promo svg --all --size both --out out/       # 72 cards
-go run ./cmd/promo svg dario-haaland --png                # rasterise too
+go run ./cmd/promo export dario-haaland                     # one talk's folder
+go run ./cmd/promo export --all --size both --out out/      # the whole program
+go run ./cmd/promo export --all --formats svg               # skip rasterising
+go run ./cmd/promo export --all --width 1000                # smaller PNG/JPEG
 ```
 
-Two sizes: **portrait** 1400×2100 (as 2025) and **landscape** 1200×630 (the site's OG
-ratio). `--size portrait|landscape|both`.
+One folder per talk, named so a directory listing falls into schedule order:
+
+```
+out/d1-0900-dario-haaland-kan-skyen-kjore-pa-en-brodrister/
+├── portrait.svg      1400×2100, the editable original
+├── portrait.png      rasterised at the card's own size
+├── portrait.jpg      the same, re-encoded (q88 by default)
+├── landscape.svg     1200×630, the site's OG ratio
+├── landscape.png
+├── landscape.jpg
+├── linkedin.txt      the post body, nothing else — paste it verbatim
+├── bluesky.txt       likewise, inside the 300-character limit
+├── NOTES.txt         what to check first, and the profiles to mention
+└── promo.yaml        the overrides that produced all of the above
+```
+
+`--formats` picks any of `svg,png,jpg` (all three by default) and `--size` any of
+`portrait,landscape,both`. The review notes are a separate file from the copy deliberately:
+`linkedin.txt` and `bluesky.txt` hold the post and nothing else, so nothing about guessed
+employers can be pasted into a real post by accident.
+
+`promo.yaml` is a manifest for that one talk, pre-filled with the values the cards actually
+used — the correction where you made one, the guess otherwise. Edit it and pass it back with
+`--manifest` to apply it. See [Overrides](#overrides).
 
 Cards are self-contained: the speaker photo is an embedded JPEG and the typefaces are
-base64 `@font-face` rules, so one file is the whole artifact. Text is real editable
+base64 `@font-face` rules, so one SVG is the whole artifact. Text is real editable
 `<text>`, not outlined paths, so a card can still be adjusted by hand afterwards. A
 finished portrait card is ~750 KB against 4.7 MB for the 2025 hand-drawn equivalents.
 
 Only the faces a card actually references get embedded, and photos are requested from the
 CDN as JPEG rather than the source PNG (47 KB against 600 KB at 600 px).
+
+The full program at both sizes is 36 folders and 360 files, around 170 MB — nearly all of
+it PNG, which is 2.3 MB per portrait card at full size. `--width` trades resolution for
+size, and `--formats svg,jpg` skips PNG entirely.
 
 ### Fonts
 
@@ -106,9 +133,11 @@ edit-by-hand and PNG paths:
 go run ./cmd/promo fonts install     # copy the vendored TTFs to ~/Library/Fonts
 ```
 
-`--png` shells out to the first of `resvg`, `inkscape`, `rsvg-convert` or `magick` found
-on PATH, at the card's own pixel size unless `--png-width` says otherwise. With none
-installed it writes the SVGs anyway and tells you what to install.
+PNG comes from the first of `resvg`, `inkscape`, `rsvg-convert` or `magick` found on PATH.
+JPEG is then re-encoded from that PNG with the standard library rather than asked of the
+tool, because only one of the four can write JPEG at all — so JPEG is available whenever
+PNG is. With no rasteriser installed, the SVGs, copy and manifests are still written and
+the run says what to install.
 
 ### Emoji
 
@@ -116,7 +145,7 @@ Talk titles contain them — *"Kan 🇳🇴 skyen kjøre på en brødrister?"*. 
 Grotesk has no emoji coverage, so runs whose glyphs are missing from the embedded font are
 split into their own `<tspan>` with a system fallback family (`Apple Color Emoji`,
 `Noto Color Emoji`) and measured at a 1 em approximation. Their advance is therefore
-approximate and an emoji-heavy title can wrap slightly off. `promo svg` says which cards
+approximate and an emoji-heavy title can wrap slightly off. `promo export` says which cards
 are affected; `--strip-emoji` removes them instead.
 
 ### Themes
@@ -127,7 +156,7 @@ data:
 
 ```sh
 go run ./cmd/promo theme dump > theme.yaml   # start from the built-in theme
-go run ./cmd/promo svg --all --theme theme.yaml
+go run ./cmd/promo export --all --theme theme.yaml
 ```
 
 A `--theme` file is merged *over* the default, so it only needs the keys it changes.
@@ -206,7 +235,8 @@ the record; `git checkout promos.yaml` is the undo.
 
 - **Display title** shortens a title on the card without touching the program.
 - **hidden** excludes a talk from `--all` and from the Export button.
-- **Export all** writes every visible card to `--out`, the same as `promo svg --all`.
+- **Export all** writes a bundle per visible talk to `--out`, through the same code as
+  `promo export --all`, so the two produce identical folders.
 
 Startup fetches the 49 speaker profile pages once (~3 MB each, then cached on disk); after
 that page loads are instant. `--no-links` skips it entirely. Cards are served as the same
@@ -215,7 +245,7 @@ approximation — which does mean a fully scrolled page pulls ~24 MB from localh
 
 ## Overrides
 
-`svg`, `post` and `serve` all read `promos.yaml` (`--manifest`), a multi-document
+`export`, `post` and `serve` all read `promos.yaml` (`--manifest`), a multi-document
 Kubernetes-style manifest. It is meant to be committed: it is the record of every
 correction made to data the tool guessed.
 
@@ -264,6 +294,8 @@ internal/theme/     theme structs, YAML loading, embedded default-2026
 internal/layout/    font metrics, greedy wrap, size autofit
 internal/render/    SVG emitters (portrait, landscape)
 internal/post/      LinkedIn / Bluesky copy
+internal/raster/    SVG → PNG via an external tool, PNG → JPEG via stdlib
+internal/export/    per-talk bundles, shared by the CLI and the server
 internal/manifest/  override manifests (load, validate, save)
 internal/web/       preview server, templates, vendored HTMX
 assets/fonts/       vendored OFL fonts + licences

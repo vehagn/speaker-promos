@@ -333,7 +333,7 @@ func (s *Set) Save() error {
 
 const fileHeader = `# Promo overrides for Cloud Native Days.
 #
-# Written by "promo serve" and read by "promo svg" and "promo post". Safe to
+# Written by "promo serve" and read by "promo export" and "promo post". Safe to
 # edit by hand and meant to be committed: this is the record of every
 # correction made to the guessed employers and the titles that were too long.
 `
