@@ -80,12 +80,9 @@ type Overrides map[string]Override
 
 // Override corrects or supplements what is known about one speaker.
 type Override struct {
-	Employer string `yaml:"employer"`
-	Job      string `yaml:"job"`
-	LinkedIn string `yaml:"linkedin"`
-	Bluesky  string `yaml:"bluesky"`
-	X        string `yaml:"x"`
-	GitHub   string `yaml:"github"`
+	Employer string
+	Job      string
+	Links    cnd.Links
 }
 
 // RoleFor resolves a speaker's role, preferring an override over the guess.
@@ -111,17 +108,10 @@ func (o Overrides) LinksFor(s cnd.Speaker, scraped cnd.Links) cnd.Links {
 	if !ok {
 		return scraped
 	}
-	if ov.LinkedIn != "" {
-		scraped.LinkedIn = ov.LinkedIn
-	}
-	if ov.Bluesky != "" {
-		scraped.Bluesky = strings.TrimPrefix(ov.Bluesky, "@")
-	}
-	if ov.X != "" {
-		scraped.X = strings.TrimPrefix(ov.X, "@")
-	}
-	if ov.GitHub != "" {
-		scraped.GitHub = ov.GitHub
-	}
-	return scraped
+	// A handle may be written with the "@" people say it with; stripping it here
+	// keeps it from being doubled in a post.
+	over := ov.Links
+	over.Bluesky = strings.TrimPrefix(over.Bluesky, "@")
+	over.X = strings.TrimPrefix(over.X, "@")
+	return scraped.Merge(over)
 }

@@ -171,7 +171,8 @@ go run ./cmd/promo theme dump > theme.yaml   # start from the built-in theme
 go run ./cmd/promo export --all --theme theme.yaml
 ```
 
-A `--theme` file is merged *over* the default, so it only needs the keys it changes.
+A `--theme` file is merged *over* the default — as YAML, key by key, so it only needs
+the keys it changes and can still set one back to `0` or `false`.
 Type sizes autofit: each text style has a size range and a maximum line count, and layout
 walks the range downward until a real font-metric wrap fits. When nothing fits, the text
 is truncated and the card is named in a warning rather than silently clipped.

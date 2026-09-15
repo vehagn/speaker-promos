@@ -1,6 +1,7 @@
 package render
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/vehagn/speaker-promos/internal/cnd"
@@ -29,9 +30,7 @@ func (r *Renderer) portrait(conf cnd.Conference, s cnd.Session, g theme.Geometry
 	y := pad
 
 	// Conference wordmark, sized by width using its own aspect ratio.
-	if aspect, ok := svgAspect(conf.LogoBright); ok {
-		logoW := float64(g.LogoWidth)
-		logoH := logoW / aspect
+	if logoW, logoH, ok := logoBox(conf, g); ok {
 		c.write(inlineSVG(conf.LogoBright, centre-logoW/2, y, logoW, logoH))
 		y += logoH + float64(g.Gap)*0.7
 	} else {
@@ -55,12 +54,7 @@ func (r *Renderer) portrait(conf cnd.Conference, s cnd.Session, g theme.Geometry
 	// Speaker photos in a row, shrinking as speakers are added so the row
 	// always fits the content width.
 	photoSize, positions := photoRow(g, len(s.Talk.Speakers), centre, content)
-	for i, sp := range s.Talk.Speakers {
-		if i >= len(positions) {
-			break
-		}
-		r.photo(c, p, sp, positions[i], y, photoSize, float64(g.Radius))
-	}
+	r.drawPhotos(c, p, s.Talk.Speakers, positions, y, photoSize, float64(g.Radius))
 	if len(positions) > 0 {
 		y += photoSize + float64(g.Gap)*0.85
 	}
@@ -156,12 +150,12 @@ func (r *Renderer) talkPanel(c *canvas, p *pass, g theme.Geometry, s cnd.Session
 func talkEyebrow(s cnd.Session) string {
 	var parts []string
 	if s.Day > 0 {
-		parts = append(parts, "Day "+itoa(s.Day))
+		parts = append(parts, "Day "+strconv.Itoa(s.Day))
 	}
 	if t := s.TimeRange(); t != "" {
 		parts = append(parts, t)
 	}
-	if track := shortTrack(s.Track); track != "" {
+	if track := s.ShortTrack(); track != "" {
 		parts = append(parts, track)
 	}
 	return strings.Join(parts, " · ")

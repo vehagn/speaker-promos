@@ -3,7 +3,6 @@ package web
 import (
 	"errors"
 	"fmt"
-	"html/template"
 	"net/http"
 	"os"
 	"strings"
@@ -99,40 +98,25 @@ func statusLine(summary string, changes []manifest.Change, muted bool) statusRep
 // renderRows re-renders every talk row, with the status report swapped in
 // out-of-band so it survives replacing the rows.
 func (s *Server) renderRows(w http.ResponseWriter, size string, status statusReport) {
-	p := s.probe(s.opts.Program.Sessions)
-
-	s.mu.Lock()
-	views := make([]talkView, 0, len(s.opts.Program.Sessions))
-	for _, sess := range s.opts.Program.Sessions {
-		views = append(views, s.buildViewLocked(sess, size, p))
-	}
-	s.mu.Unlock()
+	views, _ := s.views(size)
 
 	var buf strings.Builder
-	if err := s.tmpl.ExecuteTemplate(&buf, "rows.html", struct {
+	rows := struct {
 		Talks []talkView
 		Size  string
-	}{views, size}); err != nil {
-		s.fail(w, fmt.Errorf("rendering rows: %w", err))
-		return
-	}
-
-	// hx-swap-oob targets the status element by id, so it updates even though
-	// the swap itself replaced the rows.
-	buf.WriteString(`<div id="status" class="status" hx-swap-oob="true">`)
-	class := ""
-	if status.Muted {
-		class = ` class="none"`
-	}
-	fmt.Fprintf(&buf, `<span%s>%s</span>`, class, template.HTMLEscapeString(status.Summary))
-	if len(status.Changes) > 0 {
-		buf.WriteString("<ul>")
-		for _, c := range status.Changes {
-			fmt.Fprintf(&buf, "<li>%s</li>", template.HTMLEscapeString(c))
+	}{views, size}
+	// The status element is addressed by id, so it updates even though the swap
+	// itself replaced the rows. Both fragments go through the templates, which
+	// is what escapes an imported value on its way onto the page.
+	for _, part := range []struct {
+		name string
+		data any
+	}{{"rows.html", rows}, {"status.html", status}} {
+		if err := s.tmpl.ExecuteTemplate(&buf, part.name, part.data); err != nil {
+			s.fail(w, fmt.Errorf("rendering %s: %w", part.name, err))
+			return
 		}
-		buf.WriteString("</ul>")
 	}
-	buf.WriteString(`</div>`)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(buf.String()))

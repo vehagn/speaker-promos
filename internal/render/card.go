@@ -224,6 +224,18 @@ func (r *Renderer) photo(c *canvas, p *pass, sp cnd.Speaker, x, y, size, radius 
 		parsePaint(r.Theme.Palette.PhotoStroke).strokeAttrs(1), num(size/160+2))
 }
 
+// drawPhotos paints a row of speaker photos at the left edges photoRow
+// computed. Speakers past the last position are the ones the row caps at.
+func (r *Renderer) drawPhotos(c *canvas, p *pass, speakers []cnd.Speaker,
+	lefts []float64, y, size, radius float64) {
+	for i, sp := range speakers {
+		if i >= len(lefts) {
+			break
+		}
+		r.photo(c, p, sp, lefts[i], y, size, radius)
+	}
+}
+
 // monogram draws a speaker's initials, used when no photo exists.
 func (r *Renderer) monogram(c *canvas, sp cnd.Speaker, cx, cy, box float64) {
 	initials := Initials(sp.Name)

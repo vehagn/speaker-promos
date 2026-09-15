@@ -1,8 +1,10 @@
 package manifest
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 )
 
@@ -58,7 +60,7 @@ func (s *Set) ImportFrom(src *Set, opts ImportOptions) ([]Change, error) {
 	defer s.mu.Unlock()
 
 	var changes []Change
-	for _, slug := range sortedKeys(incoming) {
+	for _, slug := range slices.Sorted(maps.Keys(incoming)) {
 		spec := trimSpeaker(incoming[slug])
 		current := s.speakers[slug]
 
@@ -70,38 +72,38 @@ func (s *Set) ImportFrom(src *Set, opts ImportOptions) ([]Change, error) {
 		}
 
 		merged := current
-		for _, f := range speakerFields(&spec, &merged, &current, &base) {
+		for _, f := range specFields {
+			in, was, guess := *f.of(&spec), *f.of(&current), *f.of(&base)
+			switch {
 			// Unset in the import: nothing said, so nothing changes. Clearing a
 			// field is done by editing the project manifest, not by omitting it
 			// from a bundle — half the bundles would otherwise clear whatever
 			// they happened not to mention.
-			if *f.incoming == "" {
+			case in == "":
 				continue
-			}
 			// Equal to the baseline: the pre-filled guess came back unedited.
-			if *f.incoming == *f.baseline {
+			case in == guess:
 				continue
-			}
-			if *f.incoming == *f.current {
+			// Already what the project manifest says: nothing to record.
+			case in == was:
 				continue
 			}
 			changes = append(changes, Change{
 				Kind: KindSpeakerOverride, Name: slug, Field: f.name,
-				From: *f.current, To: *f.incoming,
+				From: was, To: in,
 			})
-			*f.target = *f.incoming
+			*f.of(&merged) = in
 		}
-		if merged != current {
-			if !opts.DryRun {
-				s.speakers[slug] = trimSpeaker(merged)
-				if s.speakers[slug].empty() {
-					delete(s.speakers, slug)
-				}
+		if merged != current && !opts.DryRun {
+			if merged = trimSpeaker(merged); merged.empty() {
+				delete(s.speakers, slug)
+			} else {
+				s.speakers[slug] = merged
 			}
 		}
 	}
 
-	for _, id := range sortedKeys(incomingTalks) {
+	for _, id := range slices.Sorted(maps.Keys(incomingTalks)) {
 		spec := incomingTalks[id]
 		current := s.talks[id]
 		merged := current
@@ -158,61 +160,27 @@ func (s *Set) ImportFrom(src *Set, opts ImportOptions) ([]Change, error) {
 	return changes, nil
 }
 
-// speakerField binds one field across the four specs a merge compares.
-type speakerField struct {
-	name     string
-	incoming *string
-	target   *string
-	current  *string
-	baseline *string
-}
-
-func speakerFields(incoming, target, current, baseline *SpeakerSpec) []speakerField {
-	return []speakerField{
-		{"name", &incoming.Name, &target.Name, &current.Name, &baseline.Name},
-		{"employer", &incoming.Employer, &target.Employer, &current.Employer, &baseline.Employer},
-		{"job", &incoming.Job, &target.Job, &current.Job, &baseline.Job},
-		{"title", &incoming.Title, &target.Title, &current.Title, &baseline.Title},
-		{"image", &incoming.Image, &target.Image, &current.Image, &baseline.Image},
-		{"linkedin", &incoming.Links.LinkedIn, &target.Links.LinkedIn, &current.Links.LinkedIn, &baseline.Links.LinkedIn},
-		{"bluesky", &incoming.Links.Bluesky, &target.Links.Bluesky, &current.Links.Bluesky, &baseline.Links.Bluesky},
-		{"x", &incoming.Links.X, &target.Links.X, &current.Links.X, &baseline.Links.X},
-		{"github", &incoming.Links.GitHub, &target.Links.GitHub, &current.Links.GitHub, &baseline.Links.GitHub},
-	}
-}
-
 // Speakers returns every speaker override, keyed by slug. The map is a copy.
 func (s *Set) Speakers() map[string]SpeakerSpec {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := make(map[string]SpeakerSpec, len(s.speakers))
-	for k, v := range s.speakers {
-		out[k] = v
-	}
-	return out
+	return maps.Clone(s.speakers)
 }
 
 // Talks returns every talk override, keyed by talk id. The map is a copy.
 func (s *Set) Talks() map[string]TalkSpec {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := make(map[string]TalkSpec, len(s.talks))
-	for k, v := range s.talks {
-		out[k] = v
-	}
-	return out
+	return maps.Clone(s.talks)
 }
 
 // SortChanges orders changes for a stable report.
 func SortChanges(changes []Change) {
-	sort.Slice(changes, func(i, j int) bool {
-		a, b := changes[i], changes[j]
-		if a.Kind != b.Kind {
-			return a.Kind < b.Kind
-		}
-		if a.Name != b.Name {
-			return a.Name < b.Name
-		}
-		return a.Field < b.Field
+	slices.SortFunc(changes, func(a, b Change) int {
+		return cmp.Or(
+			cmp.Compare(a.Kind, b.Kind),
+			cmp.Compare(a.Name, b.Name),
+			cmp.Compare(a.Field, b.Field),
+		)
 	})
 }

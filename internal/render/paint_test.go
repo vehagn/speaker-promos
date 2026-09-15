@@ -2,6 +2,7 @@ package render
 
 import (
 	"math"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -222,15 +223,6 @@ func TestJoinMeta(t *testing.T) {
 	}
 }
 
-func TestShortTrack(t *testing.T) {
-	if got := shortTrack("Track 1: Full Day Workshops"); got != "Full Day Workshops" {
-		t.Errorf("shortTrack = %q", got)
-	}
-	if got := shortTrack("Keynote"); got != "Keynote" {
-		t.Errorf("shortTrack without prefix = %q", got)
-	}
-}
-
 func mustTheme(t *testing.T) *theme.Theme {
 	t.Helper()
 	th, err := theme.Default()
@@ -243,7 +235,7 @@ func mustTheme(t *testing.T) *theme.Theme {
 func speakersWithTitles(titles ...string) []cnd.Speaker {
 	out := make([]cnd.Speaker, 0, len(titles))
 	for i, title := range titles {
-		out = append(out, cnd.Speaker{ID: itoa(i), Name: "Speaker " + itoa(i), Title: title})
+		out = append(out, cnd.Speaker{ID: strconv.Itoa(i), Name: "Speaker " + strconv.Itoa(i), Title: title})
 	}
 	return out
 }

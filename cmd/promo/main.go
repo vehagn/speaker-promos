@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/vehagn/speaker-promos/internal/cache"
 	"github.com/vehagn/speaker-promos/internal/cnd"
 	"github.com/vehagn/speaker-promos/internal/manifest"
 )
@@ -84,10 +85,30 @@ func (c *commonFlags) register(fs *flag.FlagSet) {
 	fs.BoolVar(&c.noCache, "no-cache", false, "always re-fetch, ignoring the cache")
 }
 
-func (c *commonFlags) load() (*cnd.Program, error) {
+// loader reads the program and the speaker pages, honouring --domain and the
+// cache flags.
+func (c *commonFlags) loader() *cnd.Loader {
 	loader := cnd.NewLoader(c.domain, c.ttl)
 	loader.Cache.Disabled = c.noCache
-	return loader.Load()
+	return loader
+}
+
+func (c *commonFlags) load() (*cnd.Program, error) {
+	return c.loader().Load()
+}
+
+// photoCache is the cache speaker photos are fetched through, or nil for a run
+// with --no-photos, which is what makes the cards fall back to initials.
+//
+// Photos are cached far longer than the program: a portrait does not change
+// between runs, and each one is a separate CDN fetch.
+func (c *commonFlags) photoCache(enabled bool) *cache.Cache {
+	if !enabled {
+		return nil
+	}
+	images := cache.New(30 * 24 * time.Hour)
+	images.Disabled = c.noCache
+	return images
 }
 
 // manifestFlag registers the override-manifest path for a command that honours

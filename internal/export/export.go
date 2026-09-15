@@ -127,16 +127,8 @@ func (e *Exporter) Write(root string, sess cnd.Session) (Result, error) {
 	wantPNG := slices.Contains(e.Formats, FormatPNG)
 	wantJPG := slices.Contains(e.Formats, FormatJPG)
 
-	// The card's language is resolved the same way the copy's is, so a
-	// Norwegian talk joins its speakers with "og" on the image as well as in
-	// the post.
-	cardLang := e.Set.LanguageFor(sess.Talk.ID)
-	if cardLang == lang.Auto {
-		cardLang = e.Language
-	}
-
 	for _, size := range e.Sizes {
-		card, err := e.Renderer.Card(e.conference(), sess, size, cardLang)
+		card, err := e.Renderer.Card(e.conference(), sess, size, e.language(sess.Talk.ID))
 		if err != nil {
 			return res, fmt.Errorf("rendering %q at %s: %w", sess.Talk.Title, size, err)
 		}
@@ -193,11 +185,11 @@ func (e *Exporter) Write(root string, sess cnd.Session) (Result, error) {
 	}
 
 	in := e.postInput(sess)
-	drafts, err := e.writeCopy(dir, in)
+	copyFiles, err := e.writeCopy(dir, in)
 	if err != nil {
 		return res, err
 	}
-	res.Files = append(res.Files, drafts...)
+	res.Files = append(res.Files, copyFiles...)
 
 	// Written last, so it can record which card files the run actually produced.
 	yamlName, err := e.writeManifest(dir, submitted, sess, in, res)
@@ -208,14 +200,17 @@ func (e *Exporter) Write(root string, sess cnd.Session) (Result, error) {
 	return res, nil
 }
 
+// language is the talk's own copy language, which its card follows too — a
+// Norwegian talk joins its speakers with "og" on the image as well as in the
+// post. A per-talk override beats the run's --language, which beats detection.
+func (e *Exporter) language(talkID string) lang.Language {
+	return e.Set.LanguageOr(talkID, e.Language)
+}
+
 // postInput resolves the speakers once, so the copy and the record cannot
 // disagree about who works where.
 func (e *Exporter) postInput(sess cnd.Session) post.Input {
-	language := e.Set.LanguageFor(sess.Talk.ID)
-	if language == lang.Auto {
-		language = e.Language
-	}
-	in := post.Input{Conference: e.conference(), Session: sess, Language: language}
+	in := post.Input{Conference: e.conference(), Session: sess, Language: e.language(sess.Talk.ID)}
 	overrides := e.Set.Overrides()
 	for _, sp := range sess.Talk.Speakers {
 		var links cnd.Links
@@ -231,10 +226,15 @@ func (e *Exporter) postInput(sess cnd.Session) post.Input {
 	return in
 }
 
-// writeCopy writes the draft post for each platform.
+// writeCopy writes the draft post for each platform, and the notes beside them.
+//
+// The drafts are built once and used for both: they are not cheap, and asking
+// for them twice invited the copy and its own review notes to disagree.
 func (e *Exporter) writeCopy(dir string, in post.Input) ([]string, error) {
+	drafts := []post.Draft{post.LinkedIn(in), post.Bluesky(in)}
+
 	var written []string
-	for _, d := range []post.Draft{post.LinkedIn(in), post.Bluesky(in)} {
+	for _, d := range drafts {
 		name := d.Platform + ".txt"
 		// The file holds the post body and nothing else, so it can be pasted
 		// verbatim. The "check before posting" notes go in NOTES.txt, where
@@ -245,7 +245,7 @@ func (e *Exporter) writeCopy(dir string, in post.Input) ([]string, error) {
 		written = append(written, name)
 	}
 
-	if notes := collectNotes(in); notes != "" {
+	if notes := collectNotes(drafts, in); notes != "" {
 		const name = "NOTES.txt"
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(notes), 0o644); err != nil {
 			return nil, fmt.Errorf("writing %s: %w", name, err)
@@ -256,10 +256,10 @@ func (e *Exporter) writeCopy(dir string, in post.Input) ([]string, error) {
 }
 
 // collectNotes gathers the checks and mentions for a talk into one file.
-func collectNotes(in post.Input) string {
+func collectNotes(drafts []post.Draft, in post.Input) string {
 	var b strings.Builder
 	seen := map[string]bool{}
-	for _, d := range []post.Draft{post.LinkedIn(in), post.Bluesky(in)} {
+	for _, d := range drafts {
 		for _, n := range d.Notes {
 			if !seen[n] {
 				seen[n] = true
@@ -351,10 +351,6 @@ func (e *Exporter) submitted(talkID string) cnd.Session {
 	if e.Program == nil {
 		return cnd.Session{}
 	}
-	for _, s := range e.Program.Sessions {
-		if s.Talk.ID == talkID {
-			return s
-		}
-	}
-	return cnd.Session{}
+	sess, _ := e.Program.Session(talkID)
+	return sess
 }

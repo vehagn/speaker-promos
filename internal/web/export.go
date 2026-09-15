@@ -2,8 +2,8 @@ package web
 
 import (
 	"fmt"
+	"html/template"
 	"net/http"
-	"strings"
 
 	"github.com/vehagn/speaker-promos/internal/cnd"
 )
@@ -53,10 +53,5 @@ func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
 		msg += fmt.Sprintf(", %d warning(s)", n)
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintf(w, "<span>%s</span>", htmlEscape(msg))
-}
-
-// htmlEscape is used for the few plain-text responses that land in the DOM.
-func htmlEscape(s string) string {
-	return strings.NewReplacer("<", "&lt;", ">", "&gt;", "&", "&amp;").Replace(s)
+	fmt.Fprintf(w, "<span>%s</span>", template.HTMLEscapeString(msg))
 }

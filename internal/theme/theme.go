@@ -117,36 +117,36 @@ func Default() (*Theme, error) {
 // built-in theme. Overriding just a colour therefore needs a three-line file
 // rather than a full copy.
 func Load(path string) (*Theme, error) {
-	base, err := Default()
-	if err != nil {
-		return nil, err
-	}
 	if path == "" {
-		return base, nil
+		return Default()
 	}
-	b, err := os.ReadFile(path)
+	overlay, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading theme: %w", err)
 	}
-	// Decode the overlay ONTO a copy of the default so that scalar fields it
-	// omits keep their built-in values — that is what makes a three-line theme
-	// file work.
-	//
-	// The two map fields are cleared first, and this is load-bearing rather
-	// than tidiness: a struct copy shares its maps with the original, and
-	// unmarshalling into a non-nil map MUTATES it. Left populated, YAML would
-	// overwrite the default's own geometry with the overlay's partial entries,
-	// and the merge below would then have nothing intact left to merge against.
-	// Nilled, YAML allocates fresh maps holding only what the file declares.
-	merged := *base
-	merged.Fonts = nil
-	merged.Geometry = nil
-	if err := yaml.Unmarshal(b, &merged); err != nil {
+	base, err := builtin.ReadFile("default.yaml")
+	if err != nil {
+		return nil, err
+	}
+
+	// The two are merged as YAML documents rather than as structs, because the
+	// overlay is legitimately partial at every level: a file that changes one
+	// text style's maximum size must still inherit the rest of that style, the
+	// other styles in that size, and the other sizes. Merging the documents and
+	// decoding once gets that for every field there is — including any added
+	// later, which a hand-written per-field merge would silently drop.
+	var baseNode, overlayNode yaml.Node
+	if err := yaml.Unmarshal(base, &baseNode); err != nil {
+		return nil, fmt.Errorf("parsing built-in theme: %w", err)
+	}
+	if err := yaml.Unmarshal(overlay, &overlayNode); err != nil {
 		return nil, fmt.Errorf("parsing %s: %w", path, err)
 	}
-	merged.Fonts = mergeFaces(base.Fonts, merged.Fonts)
-	merged.Geometry = mergeGeometry(base.Geometry, merged.Geometry)
 
+	var merged Theme
+	if err := mergeNodes(&baseNode, &overlayNode).Decode(&merged); err != nil {
+		return nil, fmt.Errorf("parsing %s: %w", path, err)
+	}
 	// Only the merged result has to be coherent; the overlay on its own is
 	// legitimately partial.
 	if err := merged.validate(path); err != nil {
@@ -169,105 +169,59 @@ func parse(b []byte, source string) (*Theme, error) {
 	return &t, nil
 }
 
-func mergeFaces(base, overlay map[string]Face) map[string]Face {
-	out := maps.Clone(base)
-	if out == nil {
-		out = map[string]Face{}
+// mergeNodes returns base with overlay laid over it.
+//
+// Where both sides hold a mapping under the same key the two are merged
+// recursively, so an overlay only has to carry the keys it changes. Anything
+// else — a scalar, a sequence, or a key the base does not have — is taken from
+// the overlay verbatim, which is also what lets a theme deliberately set a
+// value to zero, false or empty.
+//
+// Neither input is modified: a merged mapping is a copy, so the built-in theme
+// survives being merged against.
+func mergeNodes(base, overlay *yaml.Node) *yaml.Node {
+	switch {
+	case isEmpty(overlay):
+		return base
+	case isEmpty(base):
+		return overlay
+	case base.Kind == yaml.DocumentNode && overlay.Kind == yaml.DocumentNode:
+		merged := *base
+		merged.Content = []*yaml.Node{mergeNodes(base.Content[0], overlay.Content[0])}
+		return &merged
+	case base.Kind != yaml.MappingNode || overlay.Kind != yaml.MappingNode:
+		return overlay
 	}
-	for k, v := range overlay {
-		merged := out[k]
-		if v.Family != "" {
-			merged.Family = v.Family
-		}
-		if v.File != "" {
-			merged.File = v.File
-		}
-		if v.Weight != 0 {
-			merged.Weight = v.Weight
-		}
-		if v.Style != "" {
-			merged.Style = v.Style
-		}
-		out[k] = merged
-	}
-	return out
-}
 
-func mergeGeometry(base, overlay map[string]Geometry) map[string]Geometry {
-	out := maps.Clone(base)
-	if out == nil {
-		out = map[string]Geometry{}
-	}
-	for name, og := range overlay {
-		bg, ok := out[name]
-		if !ok {
-			out[name] = og
+	merged := *base
+	merged.Content = slices.Clone(base.Content)
+	// A mapping's content is a flat key, value, key, value slice.
+	for i := 0; i+1 < len(overlay.Content); i += 2 {
+		key, value := overlay.Content[i], overlay.Content[i+1]
+		if at := indexKey(merged.Content, key.Value); at >= 0 {
+			merged.Content[at+1] = mergeNodes(merged.Content[at+1], value)
 			continue
 		}
-		// Re-decoding the overlay onto the base geometry would be cleaner, but
-		// the overlay has already been parsed, so copy non-zero fields.
-		if og.Width != 0 {
-			bg.Width = og.Width
-		}
-		if og.Height != 0 {
-			bg.Height = og.Height
-		}
-		if og.Pad != 0 {
-			bg.Pad = og.Pad
-		}
-		if og.Gap != 0 {
-			bg.Gap = og.Gap
-		}
-		if og.Radius != 0 {
-			bg.Radius = og.Radius
-		}
-		if og.LogoWidth != 0 {
-			bg.LogoWidth = og.LogoWidth
-		}
-		if og.PhotoSize != 0 {
-			bg.PhotoSize = og.PhotoSize
-		}
-		bg.Text = mergeText(bg.Text, og.Text)
-		out[name] = bg
+		merged.Content = append(merged.Content, key, value)
 	}
-	return out
+	return &merged
 }
 
-func mergeText(base, overlay map[string]TextStyle) map[string]TextStyle {
-	out := maps.Clone(base)
-	if out == nil {
-		out = map[string]TextStyle{}
+// isEmpty reports a node that says nothing: absent, an empty document, or an
+// explicit null — all of which mean "inherit" rather than "clear".
+func isEmpty(n *yaml.Node) bool {
+	return n == nil || n.Kind == 0 || n.Tag == "!!null" ||
+		(n.Kind == yaml.DocumentNode && len(n.Content) == 0)
+}
+
+// indexKey returns the position of a key in a mapping's content, or -1.
+func indexKey(content []*yaml.Node, key string) int {
+	for i := 0; i+1 < len(content); i += 2 {
+		if content[i].Value == key {
+			return i
+		}
 	}
-	for k, v := range overlay {
-		merged := out[k]
-		if v.Face != "" {
-			merged.Face = v.Face
-		}
-		if v.MinSize != 0 {
-			merged.MinSize = v.MinSize
-		}
-		if v.MaxSize != 0 {
-			merged.MaxSize = v.MaxSize
-		}
-		if v.MaxLines != 0 {
-			merged.MaxLines = v.MaxLines
-		}
-		if v.LineHeight != 0 {
-			merged.LineHeight = v.LineHeight
-		}
-		if v.Tracking != 0 {
-			merged.Tracking = v.Tracking
-		}
-		if v.Color != "" {
-			merged.Color = v.Color
-		}
-		if v.Opacity != 0 {
-			merged.Opacity = v.Opacity
-		}
-		merged.Uppercase = v.Uppercase || merged.Uppercase
-		out[k] = merged
-	}
-	return out
+	return -1
 }
 
 // Sizes returns the card sizes a theme defines, sorted for stable output.

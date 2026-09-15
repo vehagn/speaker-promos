@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -99,7 +98,7 @@ func New(opts Options) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	tmpl, err := template.New("").Funcs(funcs).ParseFS(files, "templates/*.html")
+	tmpl, err := template.New("").ParseFS(files, "templates/*.html")
 	if err != nil {
 		return nil, fmt.Errorf("parsing templates: %w", err)
 	}
@@ -117,15 +116,6 @@ func New(opts Options) (*Server, error) {
 		links:        map[string]cnd.Links{},
 		photos:       map[string]bool{},
 	}, nil
-}
-
-var funcs = template.FuncMap{
-	"shortTrack": func(t string) string {
-		if _, rest, ok := strings.Cut(t, ": "); ok {
-			return rest
-		}
-		return t
-	},
 }
 
 // Handler returns the mux serving the site.
@@ -147,26 +137,12 @@ func (s *Server) Handler() http.Handler {
 
 // session finds a session by talk id.
 func (s *Server) session(id string) (cnd.Session, bool) {
-	for _, sess := range s.opts.Program.Sessions {
-		if sess.Talk.ID == id {
-			return sess, true
-		}
-	}
-	return cnd.Session{}, false
+	return s.opts.Program.Session(id)
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	size := s.sizeParam(r)
-	p := s.probe(s.opts.Program.Sessions)
-
-	s.mu.Lock()
-	views := make([]talkView, 0, len(s.opts.Program.Sessions))
-	for _, sess := range s.opts.Program.Sessions {
-		views = append(views, s.buildViewLocked(sess, size, p))
-	}
-	rev := s.rev
-	setPath := s.opts.Set.Path()
-	s.mu.Unlock()
+	views, rev := s.views(size)
 
 	data := struct {
 		Conference cnd.Conference
@@ -182,10 +158,64 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		Size:       size,
 		Sizes:      s.opts.Theme.Sizes(),
 		Rev:        rev,
-		Manifest:   setPath,
+		Manifest:   s.opts.Set.Path(),
 		OutDir:     s.opts.OutDir,
 	}
 	s.renderTemplate(w, "index.html", data)
+}
+
+// views builds every talk's view, and returns the manifest revision the cards
+// they point at were addressed with. Shared by the index and the import, which
+// both replace the whole row list.
+func (s *Server) views(size string) ([]talkView, int64) {
+	p := s.probe(s.opts.Program.Sessions)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]talkView, 0, len(s.opts.Program.Sessions))
+	for _, sess := range s.opts.Program.Sessions {
+		out = append(out, s.buildViewLocked(sess, size, p))
+	}
+	return out, s.rev
+}
+
+// renderTalk re-renders one talk's row.
+//
+// The probes are gathered BEFORE the page lock and the view is built under it.
+// That ordering is the point of this helper: probing inside buildViewLocked
+// meant one unresponsive image host blocked the lock every render needs, so a
+// single dead photo URL wedged the whole server.
+//
+// err is reported after the view is built rather than instead of it, so a
+// failed edit still leaves the row showing what was actually stored.
+func (s *Server) renderTalk(w http.ResponseWriter, r *http.Request, sess cnd.Session, err error) {
+	p := s.probe([]cnd.Session{sess})
+	s.mu.Lock()
+	view := s.buildViewLocked(sess, s.sizeParam(r), p)
+	s.mu.Unlock()
+
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	s.renderTemplate(w, "talk.html", view)
+}
+
+// saveAndRender applies one edit and swaps the row it changed back in.
+//
+// save runs under s.mu, which guards the manifest and the revision that card
+// URLs carry; bumping it is what makes the browser refetch this card and only
+// this card.
+func (s *Server) saveAndRender(w http.ResponseWriter, r *http.Request,
+	sess cnd.Session, save func() error) {
+	s.mu.Lock()
+	err := save()
+	if err == nil {
+		s.rev++
+	}
+	s.mu.Unlock()
+
+	s.renderTalk(w, r, sess, err)
 }
 
 func (s *Server) handleTalkFragment(w http.ResponseWriter, r *http.Request) {
@@ -194,11 +224,7 @@ func (s *Server) handleTalkFragment(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	p := s.probe([]cnd.Session{sess})
-	s.mu.Lock()
-	view := s.buildViewLocked(sess, s.sizeParam(r), p)
-	s.mu.Unlock()
-	s.renderTemplate(w, "talk.html", view)
+	s.renderTalk(w, r, sess, nil)
 }
 
 func (s *Server) handleTalkUpdate(w http.ResponseWriter, r *http.Request) {
@@ -221,26 +247,9 @@ func (s *Server) handleTalkUpdate(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-
-	s.mu.Lock()
-	err := s.opts.Set.SetTalk(sess.Talk.ID, spec)
-	if err == nil {
-		s.rev++
-	}
-	s.mu.Unlock()
-
-	// Probed after the write and outside the lock, so the view reflects the
-	// edit without holding the lock across a fetch.
-	p := s.probe([]cnd.Session{sess})
-	s.mu.Lock()
-	view := s.buildViewLocked(sess, s.sizeParam(r), p)
-	s.mu.Unlock()
-
-	if err != nil {
-		s.fail(w, err)
-		return
-	}
-	s.renderTemplate(w, "talk.html", view)
+	s.saveAndRender(w, r, sess, func() error {
+		return s.opts.Set.SetTalk(sess.Talk.ID, spec)
+	})
 }
 
 func (s *Server) handleSpeakerUpdate(w http.ResponseWriter, r *http.Request) {
@@ -254,18 +263,16 @@ func (s *Server) handleSpeakerUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	submitted := manifest.SpeakerSpec{
-		Name:     strings.TrimSpace(r.FormValue("name")),
-		Employer: strings.TrimSpace(r.FormValue("employer")),
-		Job:      strings.TrimSpace(r.FormValue("job")),
-		Title:    strings.TrimSpace(r.FormValue("title")),
-		Image:    strings.TrimSpace(r.FormValue("image")),
-		Links: manifest.Links{
-			LinkedIn: strings.TrimSpace(r.FormValue("linkedin")),
-			Bluesky:  strings.TrimPrefix(strings.TrimSpace(r.FormValue("bluesky")), "@"),
-			X:        strings.TrimPrefix(strings.TrimSpace(r.FormValue("x")), "@"),
-		},
+	// The inputs carry the manifest's own field names, so the submission is read
+	// through the same table the manifest merges and saves with — adding a field
+	// to a speaker needs no change here.
+	var submitted manifest.SpeakerSpec
+	for _, field := range manifest.SpeakerFields() {
+		submitted.SetValue(field, strings.TrimSpace(r.FormValue(field)))
 	}
+	// A handle may be typed with the "@" people say it with.
+	submitted.Links.Bluesky = strings.TrimPrefix(submitted.Links.Bluesky, "@")
+	submitted.Links.X = strings.TrimPrefix(submitted.Links.X, "@")
 
 	// The form arrives fully populated, because its inputs are pre-filled with
 	// the values in use so they can be edited in place. Only what differs from
@@ -275,7 +282,7 @@ func (s *Server) handleSpeakerUpdate(w http.ResponseWriter, r *http.Request) {
 	var base manifest.SpeakerSpec
 	for _, sp := range sess.Talk.Speakers {
 		if sp.Slug == slug {
-			base = speakerBaseline(sp, s.speakerLinks(sp))
+			base = manifest.Baseline(sp, s.speakerLinks(sp))
 			break
 		}
 	}
@@ -312,29 +319,13 @@ func (s *Server) handleSpeakerUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	base.Title = fresh
 
-	spec := onlyChanges(submitted, base)
+	spec := submitted.Diff(base)
 	// GitHub has no input, so it is carried over rather than diffed.
 	spec.Links.GitHub = existing.Links.GitHub
 
-	s.mu.Lock()
-	err := s.opts.Set.SetSpeaker(slug, spec)
-	if err == nil {
-		s.rev++
-	}
-	s.mu.Unlock()
-
-	// Probed after the write and outside the lock: a newly set image URL is
-	// uncached, and fetching it under the lock is what used to hang the server.
-	p := s.probe([]cnd.Session{sess})
-	s.mu.Lock()
-	view := s.buildViewLocked(sess, s.sizeParam(r), p)
-	s.mu.Unlock()
-
-	if err != nil {
-		s.fail(w, err)
-		return
-	}
-	s.renderTemplate(w, "talk.html", view)
+	s.saveAndRender(w, r, sess, func() error {
+		return s.opts.Set.SetSpeaker(slug, spec)
+	})
 }
 
 func (s *Server) handleCard(w http.ResponseWriter, r *http.Request) {
@@ -412,8 +403,6 @@ func (s *Server) fail(w http.ResponseWriter, err error) {
 	w.WriteHeader(http.StatusInternalServerError)
 	fmt.Fprintf(w, `<p class="error">%s</p>`, template.HTMLEscapeString(err.Error()))
 }
-
-func itoa(i int64) string { return strconv.FormatInt(i, 10) }
 
 // speakerLinks returns a speaker's scraped handles, fetching once per process.
 func (s *Server) speakerLinks(sp cnd.Speaker) cnd.Links {
@@ -520,11 +509,7 @@ func (s *Server) probe(sessions []cnd.Session) probes {
 			if _, done := out.links[sp.Slug]; !done {
 				out.links[sp.Slug] = s.speakerLinks(sp)
 			}
-			rendered := sp
-			if i < len(rewritten.Talk.Speakers) {
-				rendered = rewritten.Talk.Speakers[i]
-			}
-			out.photos[sp.Slug] = s.hasPhoto(rendered)
+			out.photos[sp.Slug] = s.hasPhoto(drawnSpeaker(rewritten, i, sp))
 		}
 	}
 	return out
@@ -550,88 +535,30 @@ func (s *Server) hasPhoto(sp cnd.Speaker) bool {
 	return ok
 }
 
-// speakerBaseline is a speaker with no override at all: the program's own
-// name, title and photo, the employer guessed out of the free text, and the
-// handles scraped from their profile page.
-//
-// It is what the form's pre-filled values are diffed against, so touching one
-// field cannot quietly record the rest of the found values as corrections.
-func speakerBaseline(sp cnd.Speaker, links cnd.Links) manifest.SpeakerSpec {
-	role := post.ParseRole(sp.Title)
-	return manifest.SpeakerSpec{
-		Name:     sp.Name,
-		Employer: role.Employer,
-		Job:      role.Job,
-		Title:    sp.Title,
-		Image:    sp.Image,
-		Links: manifest.Links{
-			LinkedIn: links.LinkedIn,
-			Bluesky:  links.Bluesky,
-			X:        links.X,
-			GitHub:   links.GitHub,
-		},
-	}
-}
-
 // effectiveSpeaker is what the card and copy actually use, which is what the
-// form's inputs are pre-filled with.
+// form's inputs are pre-filled with: the correction where there is one,
+// otherwise the value the tool found.
 //
-// Name, role line and photo are taken from the RENDERED speaker rather than
+// Name, role line and photo are taken from the DRAWN speaker rather than
 // recomposed here: that is the speaker the card was drawn from, so the field
 // cannot show something the artwork does not. It matters most for the role
 // line, which the card composes from an employer and job override — showing
 // the upstream text there while the card said something else was precisely the
 // drift this is meant to remove.
-func effectiveSpeaker(base manifest.SpeakerSpec, rendered cnd.Speaker,
+func effectiveSpeaker(base manifest.SpeakerSpec, drawn cnd.Speaker,
 	override manifest.SpeakerSpec) manifest.SpeakerSpec {
-	pick := func(over, found string) string {
-		if over != "" {
-			return over
-		}
-		return found
-	}
-	return manifest.SpeakerSpec{
-		Name:     rendered.Name,
-		Employer: pick(override.Employer, base.Employer),
-		Job:      pick(override.Job, base.Job),
-		Title:    rendered.Title,
-		Image:    rendered.Image,
-		Links: manifest.Links{
-			LinkedIn: pick(override.Links.LinkedIn, base.Links.LinkedIn),
-			Bluesky:  pick(override.Links.Bluesky, base.Links.Bluesky),
-			X:        pick(override.Links.X, base.Links.X),
-			GitHub:   pick(override.Links.GitHub, base.Links.GitHub),
-		},
-	}
+	spec := override.Overlay(base)
+	spec.Name, spec.Title, spec.Image = drawn.Name, drawn.Title, drawn.Image
+	return spec
 }
 
-// onlyChanges reduces a submitted spec to what actually differs from the
-// baseline, so the manifest records corrections and not a copy of everything
-// the tool already knew.
-//
-// A field submitted empty is treated as "no opinion" rather than "make it
-// empty": an override has no way to express an explicit blank, and the value
-// simply reverts to what was found — which the form then shows again.
-func onlyChanges(submitted, base manifest.SpeakerSpec) manifest.SpeakerSpec {
-	keep := func(value, found string) string {
-		if value == "" || value == found {
-			return ""
-		}
-		return value
+// drawnSpeaker pairs a submitted speaker with the rewritten one the card was
+// drawn from. Rewrite preserves order and length, so the indices line up.
+func drawnSpeaker(rewritten cnd.Session, i int, submitted cnd.Speaker) cnd.Speaker {
+	if i < len(rewritten.Talk.Speakers) {
+		return rewritten.Talk.Speakers[i]
 	}
-	return manifest.SpeakerSpec{
-		Name:     keep(submitted.Name, base.Name),
-		Employer: keep(submitted.Employer, base.Employer),
-		Job:      keep(submitted.Job, base.Job),
-		Title:    keep(submitted.Title, base.Title),
-		Image:    keep(submitted.Image, base.Image),
-		Links: manifest.Links{
-			LinkedIn: keep(submitted.Links.LinkedIn, base.Links.LinkedIn),
-			Bluesky:  keep(submitted.Links.Bluesky, base.Links.Bluesky),
-			X:        keep(submitted.Links.X, base.Links.X),
-			GitHub:   keep(submitted.Links.GitHub, base.Links.GitHub),
-		},
-	}
+	return submitted
 }
 
 // buildViewLocked assembles a talk's view. Callers must hold s.mu, and must
@@ -644,16 +571,13 @@ func (s *Server) buildViewLocked(sess cnd.Session, size string, p probes) talkVi
 	view := talkView{
 		Session: rewritten,
 		Size:    size,
-		CardURL: fmt.Sprintf("/card/%s?size=%s&rev=%s", sess.Talk.ID, size, itoa(s.rev)),
+		CardURL: fmt.Sprintf("/card/%s?size=%s&rev=%d", sess.Talk.ID, size, s.rev),
 		Hidden:  set.Hidden(sess.Talk.ID),
 	}
 	view.Talk, _ = set.Talk(sess.Talk.ID)
 	view.SubmittedTitle = sess.Talk.Title
 
-	language := set.LanguageFor(sess.Talk.ID)
-	if language == lang.Auto {
-		language = s.opts.Language
-	}
+	language := s.cardLanguage(sess.Talk.ID)
 	in := post.Input{Conference: s.opts.Program.Conference, Session: rewritten, Language: language}
 	for i, sp := range sess.Talk.Speakers {
 		links := overrides.LinksFor(sp, p.linksFor(sp.Slug))
@@ -668,25 +592,18 @@ func (s *Server) buildViewLocked(sess cnd.Session, size string, p probes) talkVi
 		// The draft COPY uses the rewritten speaker, because that is who the
 		// post is about. Building it from the original left a corrected name on
 		// the card but not in the draft beside it, which is exactly the drift
-		// this view model exists to prevent. Rewrite preserves order and
-		// length, so the indices line up.
-		rendered := sp
-		if i < len(rewritten.Talk.Speakers) {
-			rendered = rewritten.Talk.Speakers[i]
-		}
+		// this view model exists to prevent.
+		drawn := drawnSpeaker(rewritten, i, sp)
 
-		base := speakerBaseline(sp, p.linksFor(sp.Slug))
+		base := manifest.Baseline(sp, p.linksFor(sp.Slug))
 		view.Speakers = append(view.Speakers, speakerView{
 			Speaker:   sp,
-			Role:      role,
-			Links:     links,
 			Override:  override,
-			Baseline:  base,
-			Effective: effectiveSpeaker(base, rendered, override),
+			Effective: effectiveSpeaker(base, drawn, override),
 			Guessed:   role.Guessed,
 			HasPhoto:  p.photoFor(sp.Slug),
 		})
-		in.Speakers = append(in.Speakers, post.Speaker{Speaker: rendered, Role: role, Links: links})
+		in.Speakers = append(in.Speakers, post.Speaker{Speaker: drawn, Role: role, Links: links})
 	}
 
 	view.Language = in.Language.Resolve(rewritten.Talk.Title, rewritten.Talk.Abstract)
@@ -747,12 +664,9 @@ func pickNonEmpty(a, b string) string {
 	return b
 }
 
-// cardLanguage resolves the wording a talk's card should use: its own override
-// where there is one, otherwise the server default, otherwise detection.
+// cardLanguage resolves the wording a talk's card and copy should use: its own
+// override where there is one, otherwise the server default, otherwise
+// detection.
 func (s *Server) cardLanguage(talkID string) lang.Language {
-	l := s.opts.Set.LanguageFor(talkID)
-	if l == lang.Auto {
-		l = s.opts.Language
-	}
-	return l
+	return s.opts.Set.LanguageOr(talkID, s.opts.Language)
 }

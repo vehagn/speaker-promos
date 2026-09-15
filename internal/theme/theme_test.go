@@ -134,6 +134,55 @@ geometry:
 	}
 }
 
+// Merging as YAML rather than as structs is what makes a zero value express
+// an intent: the struct merge this replaced could only see a non-zero field, so
+// "uppercase: false" and "not mentioned" were indistinguishable.
+func TestLoadCanSetAFieldBackToItsZeroValue(t *testing.T) {
+	base, err := Default()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bg, _ := base.Size("portrait")
+	if !bg.Text["eyebrow"].Uppercase {
+		t.Skip("the built-in eyebrow is no longer uppercase; nothing to turn off")
+	}
+
+	path := filepath.Join(t.TempDir(), "t.yaml")
+	body := "geometry:\n  portrait:\n    text:\n      eyebrow:\n        uppercase: false\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	th, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, _ := th.Size("portrait")
+	if g.Text["eyebrow"].Uppercase {
+		t.Error("uppercase: false did not turn the eyebrow's capitals off")
+	}
+	// And the rest of that style is still inherited.
+	if g.Text["eyebrow"].MaxSize != bg.Text["eyebrow"].MaxSize {
+		t.Errorf("eyebrow lost inherited fields: %+v", g.Text["eyebrow"])
+	}
+}
+
+// A theme file that says nothing is the default, not an error and not an empty
+// theme.
+func TestLoadEmptyOverlayIsTheDefault(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "empty.yaml")
+	if err := os.WriteFile(path, []byte("# nothing to change\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	th, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base, _ := Default()
+	if th.Name != base.Name || len(th.Geometry) != len(base.Geometry) || len(th.Fonts) != len(base.Fonts) {
+		t.Errorf("empty overlay did not inherit the default: %+v", th)
+	}
+}
+
 func TestLoadRejectsBadThemes(t *testing.T) {
 	for name, body := range map[string]string{
 		"undefined face": "geometry:\n  portrait:\n    text:\n      talk:\n        face: nope\n",

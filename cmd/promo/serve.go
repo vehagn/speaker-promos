@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/vehagn/speaker-promos/internal/cache"
-	"github.com/vehagn/speaker-promos/internal/cnd"
 	"github.com/vehagn/speaker-promos/internal/export"
 	"github.com/vehagn/speaker-promos/internal/theme"
 	"github.com/vehagn/speaker-promos/internal/web"
@@ -40,18 +38,12 @@ func cmdServe(args []string) error {
 	if err != nil {
 		return err
 	}
-	loader := cnd.NewLoader(common.domain, common.ttl)
-	loader.Cache.Disabled = common.noCache
+	loader := common.loader()
 	program, err := loader.Load()
 	if err != nil {
 		return err
 	}
-
-	var images *cache.Cache
-	if !*noPhotos {
-		images = cache.New(30 * 24 * time.Hour)
-		images.Disabled = common.noCache
-	}
+	images := common.photoCache(!*noPhotos)
 
 	wantFormats, err := export.ParseFormats(*formats)
 	if err != nil {

@@ -66,21 +66,40 @@ func FindFiles(args []string) ([]string, error) {
 	return out, nil
 }
 
-// speakerBaseline reports what the tool would produce for a speaker with no
-// override: their upstream name, and the employer and job guessed out of the
-// free-text profile title.
+// Baseline is what the tool produces for a speaker with no override at all:
+// their upstream name and photo, the employer and job guessed out of the
+// free-text profile title, and the handles scraped from their profile page.
+//
+// It is what a submitted correction is compared against, so that touching one
+// field cannot quietly record the rest of the found values as corrections too.
+func Baseline(sp cnd.Speaker, links cnd.Links) SpeakerSpec {
+	role := post.ParseRole(sp.Title)
+	return SpeakerSpec{
+		Name:     sp.Name,
+		Employer: role.Employer,
+		Job:      role.Job,
+		Title:    sp.Title,
+		Image:    sp.Image,
+		Links:    LinksOf(links),
+	}
+}
+
+// speakerBaseline reports the fields an exported bundle pre-fills, which are
+// the only ones an import may dismiss as "the guess came back unedited".
+//
+// It is deliberately narrower than Baseline: a bundle pre-fills the name and
+// the guessed employer and job, but never the role line, the photo or the
+// handles, so a value in one of those is always something someone typed and is
+// taken as an edit.
 func speakerBaseline(program *cnd.Program) func(string) (SpeakerSpec, bool) {
 	base := map[string]SpeakerSpec{}
 	for _, sp := range program.Speakers() {
 		if sp.Slug == "" {
 			continue
 		}
-		role := post.ParseRole(sp.Title)
-		base[sp.Slug] = SpeakerSpec{
-			Name:     sp.Name,
-			Employer: role.Employer,
-			Job:      role.Job,
-		}
+		spec := Baseline(sp, cnd.Links{})
+		spec.Title, spec.Image = "", ""
+		base[sp.Slug] = spec
 	}
 	return func(slug string) (SpeakerSpec, bool) {
 		spec, ok := base[slug]

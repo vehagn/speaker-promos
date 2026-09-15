@@ -5,25 +5,6 @@ import (
 	"time"
 )
 
-// joinAnd joins names as prose, using the given conjunction.
-func joinAnd(items []string, and string) string {
-	switch len(items) {
-	case 0:
-		return ""
-	case 1:
-		return items[0]
-	default:
-		return strings.Join(items[:len(items)-1], ", ") + " " + and + " " + items[len(items)-1]
-	}
-}
-
-func shortTrack(t string) string {
-	if _, rest, ok := strings.Cut(t, ": "); ok {
-		return rest
-	}
-	return t
-}
-
 func parseDate(s string) *time.Time {
 	d, err := time.Parse(time.DateOnly, s)
 	if err != nil {

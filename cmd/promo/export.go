@@ -4,9 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
-	"github.com/vehagn/speaker-promos/internal/cache"
 	"github.com/vehagn/speaker-promos/internal/cnd"
 	"github.com/vehagn/speaker-promos/internal/export"
 	"github.com/vehagn/speaker-promos/internal/lang"
@@ -57,8 +55,7 @@ func cmdExport(args []string) error {
 	if err != nil {
 		return err
 	}
-	loader := cnd.NewLoader(common.domain, common.ttl)
-	loader.Cache.Disabled = common.noCache
+	loader := common.loader()
 	program, err := loader.Load()
 	if err != nil {
 		return err
@@ -68,14 +65,7 @@ func cmdExport(args []string) error {
 		return err
 	}
 
-	// Photos are cached far longer than the program: a portrait does not change
-	// between runs and each one is a separate CDN fetch.
-	var images *cache.Cache
-	if !*noPhotos {
-		images = cache.New(30 * 24 * time.Hour)
-		images.Disabled = common.noCache
-	}
-	renderer, err := render.New(th, images)
+	renderer, err := render.New(th, common.photoCache(!*noPhotos))
 	if err != nil {
 		return err
 	}

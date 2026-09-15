@@ -43,8 +43,7 @@ func cmdPost(args []string) error {
 		return err
 	}
 
-	loader := cnd.NewLoader(common.domain, common.ttl)
-	loader.Cache.Disabled = common.noCache
+	loader := common.loader()
 
 	for i, s := range sessions {
 		if i > 0 {
@@ -52,11 +51,11 @@ func cmdPost(args []string) error {
 		}
 		// A per-talk override wins over the flag, which in turn wins over
 		// detection.
-		talkLang := set.LanguageFor(s.Talk.ID)
-		if talkLang == lang.Auto {
-			talkLang = copyLang
+		in := post.Input{
+			Conference: program.Conference,
+			Session:    s,
+			Language:   set.LanguageOr(s.Talk.ID, copyLang),
 		}
-		in := post.Input{Conference: program.Conference, Session: s, Language: talkLang}
 		for _, sp := range s.Talk.Speakers {
 			var links cnd.Links
 			if !*noLinks {

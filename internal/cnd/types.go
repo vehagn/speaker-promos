@@ -122,6 +122,16 @@ type Program struct {
 	Sessions   []Session  `json:"sessions"`
 }
 
+// Session returns the session for a talk id.
+func (p Program) Session(id string) (Session, bool) {
+	for _, s := range p.Sessions {
+		if s.Talk.ID == id {
+			return s, true
+		}
+	}
+	return Session{}, false
+}
+
 // Speakers returns every distinct speaker in the program, in first-appearance
 // order.
 func (p Program) Speakers() []Speaker {
@@ -155,13 +165,21 @@ func (s Session) SpeakerNames(and string) string {
 			names = append(names, sp.Name)
 		}
 	}
-	switch len(names) {
+	return JoinAnd(names, and)
+}
+
+// JoinAnd joins items as prose: "A", "A and B", or "A, B and C".
+//
+// The conjunction is a parameter because a Norwegian talk reads "A og B", and
+// because the social copy joins names that carry their employer with them.
+func JoinAnd(items []string, and string) string {
+	switch len(items) {
 	case 0:
 		return ""
 	case 1:
-		return names[0]
+		return items[0]
 	default:
-		return strings.Join(names[:len(names)-1], ", ") + " " + and + " " + names[len(names)-1]
+		return strings.Join(items[:len(items)-1], ", ") + " " + and + " " + items[len(items)-1]
 	}
 }
 

@@ -285,6 +285,68 @@ func TestApplyRewritesAndFilters(t *testing.T) {
 	}
 }
 
+// The field table is what every field-by-field walk now goes through — the
+// import merge, the form's values, and the two compositions below — so it has
+// to cover every field a spec has.
+func TestSpecFieldTableCoversEveryField(t *testing.T) {
+	full := SpeakerSpec{
+		Name: "n", Employer: "e", Job: "j", Title: "t", Image: "i",
+		Links: Links{LinkedIn: "l", Bluesky: "b", X: "x", GitHub: "g"},
+	}
+	var rebuilt SpeakerSpec
+	for _, field := range SpeakerFields() {
+		value := full.Value(field)
+		if value == "" {
+			t.Errorf("field %q reads back empty from a fully populated spec", field)
+		}
+		rebuilt.SetValue(field, value)
+	}
+	// A field missing from the table would leave a gap here, which is exactly
+	// the mistake the table exists to make impossible.
+	if rebuilt != full {
+		t.Errorf("round trip through the table lost a field:\n got %+v\nwant %+v", rebuilt, full)
+	}
+	if got := full.Value("nope"); got != "" {
+		t.Errorf("unknown field = %q, want empty", got)
+	}
+	// Setting an unknown field is ignored rather than fatal: a form may carry
+	// inputs that are not corrections.
+	spec := full
+	spec.SetValue("nope", "value")
+	if spec != full {
+		t.Errorf("an unknown field changed the spec: %+v", spec)
+	}
+}
+
+func TestOverlayAndDiff(t *testing.T) {
+	base := SpeakerSpec{
+		Name: "Dario Haaland", Employer: "Bysten Labs", Job: "Engineer",
+		Links: Links{Bluesky: "scraped.example"},
+	}
+	override := SpeakerSpec{Employer: "Bysten Labs AS", Links: Links{Bluesky: "dario.example"}}
+
+	// Overlay is what the form shows: the correction where there is one, the
+	// found value everywhere else.
+	got := override.Overlay(base)
+	want := SpeakerSpec{
+		Name: "Dario Haaland", Employer: "Bysten Labs AS", Job: "Engineer",
+		Links: Links{Bluesky: "dario.example"},
+	}
+	if got != want {
+		t.Errorf("Overlay =\n %+v\nwant %+v", got, want)
+	}
+
+	// Diff is what gets stored: only what the form actually changed, so the
+	// found values do not turn into confirmed corrections.
+	if got, want := got.Diff(base), override; got != want {
+		t.Errorf("Diff =\n %+v\nwant %+v", got, want)
+	}
+	// An empty field is "no opinion", not "clear it".
+	if got := (SpeakerSpec{}).Diff(base); !got.empty() {
+		t.Errorf("an empty submission recorded %+v", got)
+	}
+}
+
 func TestRoleTitle(t *testing.T) {
 	for _, tc := range []struct {
 		spec SpeakerSpec

@@ -338,6 +338,34 @@ func TestSpeakerNames(t *testing.T) {
 	}
 }
 
+func TestJoinAnd(t *testing.T) {
+	for _, tc := range []struct {
+		in   []string
+		want string
+	}{
+		{nil, ""},
+		{[]string{"A"}, "A"},
+		{[]string{"A", "B"}, "A and B"},
+		{[]string{"A", "B", "C"}, "A, B and C"},
+	} {
+		if got := JoinAnd(tc.in, "and"); got != tc.want {
+			t.Errorf("JoinAnd(%v) = %q", tc.in, got)
+		}
+	}
+}
+
+func TestShortTrack(t *testing.T) {
+	for in, want := range map[string]string{
+		"Track 1: Full Day Workshops": "Full Day Workshops",
+		"Keynote":                     "Keynote",
+		"":                            "",
+	} {
+		if got := (Session{Track: in}).ShortTrack(); got != want {
+			t.Errorf("ShortTrack(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestFirstSentences(t *testing.T) {
 	text := "Første setning her. Andre setning som er ganske lang og fortsetter. Tredje."
 	if got := FirstSentences(text, 200); got != text {

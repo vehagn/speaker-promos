@@ -15,8 +15,24 @@ type Links struct {
 }
 
 // Empty reports whether no links were found.
-func (l Links) Empty() bool {
-	return l.LinkedIn == "" && l.Bluesky == "" && l.GitHub == "" && l.X == ""
+func (l Links) Empty() bool { return l == Links{} }
+
+// Merge returns l with every non-empty field of over replacing it, which is how
+// a correction wins over what was scraped.
+func (l Links) Merge(over Links) Links {
+	if over.LinkedIn != "" {
+		l.LinkedIn = over.LinkedIn
+	}
+	if over.Bluesky != "" {
+		l.Bluesky = over.Bluesky
+	}
+	if over.GitHub != "" {
+		l.GitHub = over.GitHub
+	}
+	if over.X != "" {
+		l.X = over.X
+	}
+	return l
 }
 
 var linkPatterns = []struct {

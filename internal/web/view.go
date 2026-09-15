@@ -47,8 +47,6 @@ type talkView struct {
 // speakerView is one speaker's resolved facts plus the form's current values.
 type speakerView struct {
 	Speaker cnd.Speaker
-	Role    post.Role
-	Links   cnd.Links
 	// Override holds what the manifest currently says. It is empty for a
 	// speaker with no corrections yet.
 	Override manifest.SpeakerSpec
@@ -58,13 +56,10 @@ type speakerView struct {
 	// rather than retyped from a grey placeholder.
 	//
 	// Because every field therefore arrives populated, the handler stores only
-	// what differs from Baseline. Writing the lot back would turn every guess
-	// into a confirmed correction the first time any field was touched.
+	// what differs from the baseline — manifest.Baseline, the same speaker with
+	// no override at all. Writing the lot back would turn every guess into a
+	// confirmed correction the first time any field was touched.
 	Effective manifest.SpeakerSpec
-	// Baseline is the same speaker with no override at all — what the program
-	// and the scrape give. The handler diffs against it; the view uses it to
-	// tell a found value from a corrected one.
-	Baseline manifest.SpeakerSpec
 	// Guessed marks an employer that came from the heuristic rather than the
 	// manifest, so the form can flag it for checking.
 	Guessed bool
@@ -81,6 +76,66 @@ func (v speakerView) DisplayName() string {
 		return v.Override.Name
 	}
 	return v.Speaker.Name
+}
+
+// speakerField is one input on a speaker's form.
+type speakerField struct {
+	Label string
+	// Name is the input's name AND the manifest field it corrects — which is
+	// what lets the handler read a submission back through the manifest's own
+	// field table instead of naming every field again.
+	Name        string
+	Value       string
+	Placeholder string
+	// Hint sits under the input, for a value the tool guessed.
+	Hint string
+	// Class marks the surrounding cell: a photo the card could not fetch is
+	// outlined so the field that fixes it is the obvious one.
+	Class string
+	// Wand is the endpoint of the 🪄 button on the label, and WandTitle its
+	// tooltip. Both are empty for the fields with no capitalisation rule.
+	Wand      string
+	WandTitle string
+	// Anchor is the row the wand posts back into.
+	Anchor string
+}
+
+// Fields are the speaker's editable inputs, in display order, pre-filled with
+// the values the card and copy actually used.
+//
+// The form is generated from this table rather than written out once per field
+// in the template, so adding a correctable field is one line here and one line
+// in the manifest's own table. GitHub is deliberately absent: nothing on a card
+// or in a post uses it, so it is carried through the manifest untouched.
+func (v speakerView) Fields(anchor string) []speakerField {
+	photo, photoClass := "Photo", ""
+	if !v.HasPhoto {
+		photo, photoClass = "Photo — none, showing initials", "missing"
+	}
+	var hint string
+	if v.Guessed {
+		hint = "guessed from “" + v.Speaker.Title + "”"
+	}
+
+	fields := []speakerField{
+		{Label: "Name", Name: "name", Placeholder: "unknown",
+			Wand:      "/speaker/" + v.Speaker.Slug + "/namecase",
+			WandTitle: "Capitalise the name"},
+		{Label: "Employer", Name: "employer", Placeholder: "unknown", Hint: hint},
+		{Label: "Job title", Name: "job", Placeholder: "none"},
+		{Label: "Role line (verbatim)", Name: "title",
+			Placeholder: "composed from employer + job"},
+		{Label: photo, Name: "image", Placeholder: "URL or a file path", Class: photoClass},
+		{Label: "LinkedIn", Name: "linkedin", Placeholder: "none found"},
+		{Label: "Bluesky", Name: "bluesky", Placeholder: "none found"},
+		{Label: "X", Name: "x", Placeholder: "none found"},
+	}
+	for i := range fields {
+		f := &fields[i]
+		f.Value = v.Effective.Value(f.Name)
+		f.Anchor = anchor
+	}
+	return fields
 }
 
 // draftView is one platform's copy, with its length budget resolved.
@@ -125,23 +180,4 @@ func domID(s string) string {
 		}
 	}
 	return b.String()
-}
-
-// Corrected reports whether a field currently differs from what was found,
-// which is what the form marks as yours rather than the tool's.
-func (v speakerView) Corrected(field string) bool {
-	switch field {
-	case "name":
-		return v.Override.Name != "" && v.Override.Name != v.Baseline.Name
-	case "employer":
-		return v.Override.Employer != "" && v.Override.Employer != v.Baseline.Employer
-	case "job":
-		return v.Override.Job != "" && v.Override.Job != v.Baseline.Job
-	case "title":
-		return v.Override.Title != "" && v.Override.Title != v.Baseline.Title
-	case "image":
-		return v.Override.Image != "" && v.Override.Image != v.Baseline.Image
-	default:
-		return false
-	}
 }

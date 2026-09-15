@@ -28,9 +28,7 @@ func (r *Renderer) landscape(conf cnd.Conference, s cnd.Session, g theme.Geometr
 	}
 	headerBottom := pad + metaH
 
-	if aspect, ok := svgAspect(conf.LogoBright); ok {
-		logoW := float64(g.LogoWidth)
-		logoH := logoW / aspect
+	if logoW, logoH, ok := logoBox(conf, g); ok {
 		c.write(inlineSVG(conf.LogoBright, width-pad-logoW, pad-logoH*0.15, logoW, logoH))
 		if bottom := pad - logoH*0.15 + logoH; bottom > headerBottom {
 			headerBottom = bottom
@@ -67,12 +65,7 @@ func (r *Renderer) landscape(conf cnd.Conference, s cnd.Session, g theme.Geometr
 		y = bodyTop + (available-stackH)/2
 	}
 
-	for i, sp := range s.Talk.Speakers {
-		if i >= len(positions) {
-			break
-		}
-		r.photo(c, p, sp, positions[i], y, photoSize, float64(g.Radius))
-	}
+	r.drawPhotos(c, p, s.Talk.Speakers, positions, y, photoSize, float64(g.Radius))
 	if len(positions) > 0 {
 		y += photoSize + float64(g.Gap)*0.6
 	}

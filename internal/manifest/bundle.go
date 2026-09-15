@@ -2,11 +2,9 @@ package manifest
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/vehagn/speaker-promos/internal/cnd"
 	"github.com/vehagn/speaker-promos/internal/post"
-	"gopkg.in/yaml.v3"
 )
 
 // bundleHeader introduces a per-talk manifest written into an export folder.
@@ -179,19 +177,9 @@ func (s *Set) ForSession(info SessionInfo, overrides post.Overrides) ([]byte, er
 		docs = append(docs, document{APIVersion, KindTalkOverride, Metadata{sess.Talk.ID}, spec})
 	}
 
-	var b strings.Builder
-	b.WriteString(bundleHeader)
-	if len(docs) > 0 {
-		enc := yaml.NewEncoder(&b)
-		enc.SetIndent(2)
-		for _, doc := range docs {
-			if err := enc.Encode(doc); err != nil {
-				return nil, fmt.Errorf("encoding manifest for %q: %w", sess.Talk.Title, err)
-			}
-		}
-		if err := enc.Close(); err != nil {
-			return nil, fmt.Errorf("encoding manifest for %q: %w", sess.Talk.Title, err)
-		}
+	data, err := encode(bundleHeader, docs)
+	if err != nil {
+		return nil, fmt.Errorf("encoding manifest for %q: %w", sess.Talk.Title, err)
 	}
-	return []byte(b.String()), nil
+	return data, nil
 }

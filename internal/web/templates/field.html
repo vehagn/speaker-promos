@@ -1,0 +1,30 @@
+{{define "field.html"}}
+{{- /*
+     One editable speaker field: its label, an optional 🪄 that fixes the
+     value's capitalisation, the input, and an optional hint for a guess.
+
+     Rendered once per entry of speakerView.Fields, whose Name is the
+     manifest's own field name — so what the form posts is what the manifest
+     stores, without either side listing the fields again.
+
+     The input carries no hx-* attributes of its own: the surrounding form
+     posts on any change, and change events bubble.
+
+     The opening tag is unindented on purpose: talk.html indents each field as
+     it includes it, and the rest of the markup lines up with that.
+*/ -}}
+<div{{with .Class}} class="{{.}}"{{end}}>
+            <label>{{.Label}}
+              {{- if .Wand}}
+              {{- /* Rewrites the value and saves, going through the ordinary
+                     update handler so it behaves exactly like typing it. */}}
+              <button type="button" class="wand" title="{{.WandTitle}}"
+                      hx-post="{{.Wand}}" hx-target="#{{.Anchor}}" hx-swap="outerHTML"
+                      hx-include="closest form">🪄</button>
+              {{- end}}</label>
+            <input type="text" name="{{.Name}}" value="{{.Value}}" placeholder="{{.Placeholder}}">
+            {{- with .Hint}}
+            <p class="hint">{{.}}</p>
+            {{- end}}
+          </div>
+{{- end}}

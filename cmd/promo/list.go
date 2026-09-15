@@ -58,22 +58,13 @@ func cmdList(args []string) error {
 		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\n",
 			s.Day,
 			s.TimeRange(),
-			truncate(shortTrack(s.Track), 18),
+			truncate(s.ShortTrack(), 18),
 			truncate(s.SpeakerNames("and"), 28),
 			truncate(s.Talk.Title, 44),
 			primarySelector(s),
 		)
 	}
 	return w.Flush()
-}
-
-// shortTrack drops the "Track N: " prefix the website uses, which is noise once
-// the column is labelled.
-func shortTrack(t string) string {
-	if _, rest, ok := strings.Cut(t, ": "); ok {
-		return rest
-	}
-	return t
 }
 
 // primarySelector is the shortest thing the user can copy to select a talk

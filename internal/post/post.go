@@ -68,7 +68,7 @@ func LinkedIn(in Input) Draft {
 	}
 
 	fmt.Fprintf(&b, "\n📅 %s · %s\n", s.TimeRange(), dayLabel(in.Conference, s, in.language()))
-	if track := shortTrack(s.Track); track != "" {
+	if track := s.ShortTrack(); track != "" {
 		fmt.Fprintf(&b, "📍 %s\n", track)
 	}
 	if url := talkURL(in); url != "" {
@@ -165,7 +165,7 @@ func hook(in Input) string {
 		}
 		names = append(names, name)
 	}
-	who := joinAnd(names, w.And)
+	who := cnd.JoinAnd(names, w.And)
 	if who == "" {
 		who = w.Anonymous
 	}

@@ -60,8 +60,10 @@ func TestOverridesWin(t *testing.T) {
 	o := Overrides{"dario-haaland": {
 		Employer: "Bysten Labs AS",
 		Job:      "Infrastructure Engineer",
-		LinkedIn: "https://www.linkedin.com/in/dario",
-		Bluesky:  "@dario.example",
+		Links: cnd.Links{
+			LinkedIn: "https://www.linkedin.com/in/dario",
+			Bluesky:  "@dario.example",
+		},
 	}}
 
 	r := o.RoleFor(sp)
@@ -306,22 +308,6 @@ func TestHashtagify(t *testing.T) {
 	} {
 		if got := hashtagify(in); got != want {
 			t.Errorf("hashtagify(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
-func TestJoinAnd(t *testing.T) {
-	for _, tc := range []struct {
-		in   []string
-		want string
-	}{
-		{nil, ""},
-		{[]string{"A"}, "A"},
-		{[]string{"A", "B"}, "A and B"},
-		{[]string{"A", "B", "C"}, "A, B and C"},
-	} {
-		if got := joinAnd(tc.in, "and"); got != tc.want {
-			t.Errorf("joinAnd(%v) = %q", tc.in, got)
 		}
 	}
 }

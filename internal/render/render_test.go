@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -116,7 +117,7 @@ func elideFontData(svg string) string {
 			return b.String()
 		}
 		b.WriteString("<")
-		b.WriteString(itoa(end))
+		b.WriteString(strconv.Itoa(end))
 		b.WriteString(" base64 chars elided>")
 		rest = rest[end:]
 	}

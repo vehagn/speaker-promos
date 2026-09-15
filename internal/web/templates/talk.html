@@ -12,7 +12,7 @@
   <div class="detail">
     <h2>{{.Session.Talk.Title}}</h2>
     <p class="slot">
-      Day {{.Session.Day}} · {{.Session.TimeRange}} · {{shortTrack .Session.Track}}
+      Day {{.Session.Day}} · {{.Session.TimeRange}} · {{.Session.ShortTrack}}
       {{with .Session.Talk.FormatLabel}} · {{.}}{{end}}
     </p>
 
@@ -75,52 +75,12 @@
             hx-trigger="change" hx-include="closest form">
         <input type="hidden" name="talk" value="{{$.Session.Talk.ID}}">
         <input type="hidden" name="size" value="{{$.Size}}">
+        {{/* One row per entry in speakerView.Fields, so a new correctable
+             field is a line of Go rather than another copy of this markup. */}}
         <div class="grid">
-          <div>
-            <label>Name
-              <button type="button" class="wand" title="Capitalise the name"
-                      hx-post="/speaker/{{.Speaker.Slug}}/namecase"
-                      hx-target="#{{$.Anchor}}" hx-swap="outerHTML"
-                      hx-include="closest form">🪄</button>
-            </label>
-            <input type="text" name="name" value="{{.Effective.Name}}"
-                   placeholder="unknown">
-          </div>
-          <div>
-            <label>Employer</label>
-            <input type="text" name="employer" value="{{.Effective.Employer}}"
-                   placeholder="unknown">
-            {{if .Guessed}}<p class="hint">guessed from “{{.Speaker.Title}}”</p>{{end}}
-          </div>
-          <div>
-            <label>Job title</label>
-            <input type="text" name="job" value="{{.Effective.Job}}" placeholder="none">
-          </div>
-          <div>
-            <label>Role line (verbatim)</label>
-            <input type="text" name="title" value="{{.Effective.Title}}"
-                   placeholder="composed from employer + job">
-          </div>
-          <div class="{{if not .HasPhoto}}missing{{end}}">
-            <label>Photo {{if not .HasPhoto}}— none, showing initials{{end}}</label>
-            <input type="text" name="image" value="{{.Effective.Image}}"
-                   placeholder="URL or a file path">
-          </div>
-          <div>
-            <label>LinkedIn</label>
-            <input type="text" name="linkedin" value="{{.Effective.Links.LinkedIn}}"
-                   placeholder="none found">
-          </div>
-          <div>
-            <label>Bluesky</label>
-            <input type="text" name="bluesky" value="{{.Effective.Links.Bluesky}}"
-                   placeholder="none found">
-          </div>
-          <div>
-            <label>X</label>
-            <input type="text" name="x" value="{{.Effective.Links.X}}"
-                   placeholder="none found">
-          </div>
+{{- range .Fields $.Anchor}}
+          {{template "field.html" .}}
+{{- end}}
         </div>
       </form>
     </fieldset>

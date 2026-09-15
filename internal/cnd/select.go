@@ -193,6 +193,15 @@ func prettify(s string) string {
 	return string(r)
 }
 
+// ShortTrack is the session's track without the website's "Track N: " prefix,
+// which is noise everywhere the column or line is already labelled.
+func (s Session) ShortTrack() string {
+	if _, rest, ok := strings.Cut(s.Track, ": "); ok {
+		return rest
+	}
+	return s.Track
+}
+
 // TimeRange renders a session's slot as "09:00–11:00".
 func (s Session) TimeRange() string {
 	switch {

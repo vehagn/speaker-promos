@@ -2,7 +2,6 @@ package render
 
 import (
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/vehagn/speaker-promos/internal/cnd"
@@ -61,6 +60,20 @@ func photoRow(g theme.Geometry, count int, cx, maxWidth float64) (size float64, 
 	return size, lefts
 }
 
+// logoBox is the box the conference wordmark is drawn in: the theme's logo
+// width, and the height the logo's own aspect ratio implies.
+//
+// ok is false when the markup carries no usable dimensions, which is what makes
+// a card fall back to spelling the conference name out instead.
+func logoBox(conf cnd.Conference, g theme.Geometry) (w, h float64, ok bool) {
+	aspect, ok := svgAspect(conf.LogoBright)
+	if !ok {
+		return 0, 0, false
+	}
+	w = float64(g.LogoWidth)
+	return w, w / aspect, true
+}
+
 // rolesLine renders the speakers' profile titles as one line.
 //
 // The upstream `title` field is free text and inconsistent, so this only
@@ -91,16 +104,6 @@ func joinMeta(parts ...string) string {
 	}
 	return strings.Join(kept, " · ")
 }
-
-// shortTrack drops the website's "Track N: " prefix, which is noise on a card.
-func shortTrack(t string) string {
-	if _, rest, ok := strings.Cut(t, ": "); ok {
-		return rest
-	}
-	return t
-}
-
-func itoa(i int) string { return strconv.Itoa(i) }
 
 // sortFaces orders embedded faces so output bytes are stable across runs.
 func sortFaces(faces []embeddedFace) {
